@@ -7,7 +7,9 @@ Disallow: /matches/
 Disallow: /campus-id/
 Disallow: /notifications/
 Disallow: /privacy/
+Disallow: /identity/
 Disallow: /staff/
+Disallow: /join/
 Disallow: /account/
 Disallow: /login/
 Disallow: /register/

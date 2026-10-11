@@ -1,12 +1,24 @@
 from django.conf import settings
 
+from accounts.models import email_is_verified
+
+from . import seo
+
 
 def site(request):
     return {
         "SITE_NAME": "WhoIsMyCrush",
         "SITE_TAGLINE": "You might be someone's crush too.",
         "SITE_URL": settings.SITE_URL,
+        "email_verified": email_is_verified(getattr(request, "user", None)),
+        "analytics_enabled": getattr(settings, "ANALYTICS_ENABLED", False),
+        "analytics_domain": getattr(settings, "ANALYTICS_DOMAIN", ""),
     }
+
+
+def structured_data(request):
+    """Site-wide Organization + WebSite JSON-LD, emitted on every page."""
+    return {"site_structured_data": [seo.organization(), seo.website()]}
 
 
 def navigation(request):

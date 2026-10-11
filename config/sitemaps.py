@@ -7,10 +7,17 @@ from django.urls import reverse
 STATIC_ROUTES = {
     "campus:landing": (1.0, "weekly"),
     "core:how_it_works": (0.8, "monthly"),
+    "core:secret_crush": (0.7, "monthly"),
+    "core:mutual_crush": (0.7, "monthly"),
+    "core:college_crush": (0.7, "monthly"),
+    "blog:post_list": (0.6, "weekly"),
+    "core:faq": (0.6, "monthly"),
     "campus:campus_select": (0.7, "weekly"),
     "campus:invite": (0.4, "monthly"),
+    "core:safety": (0.5, "yearly"),
     "core:about": (0.5, "yearly"),
     "core:privacy_policy": (0.4, "yearly"),
+    "core:contact": (0.4, "yearly"),
     "core:terms": (0.3, "yearly"),
 }
 

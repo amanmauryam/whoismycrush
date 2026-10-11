@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span> <span>{{ college.name }}</span>
+  </div>
+
+  <div class="join-hero">
+    <span class="college-name">{{ college.display_name }}</span>
+    <h1>Secret crushes, kept on campus.</h1>
+    <p class="lede">
+      {% if member_count > 0 %}
+        {{ member_count }} student{{ member_count|pluralize }} from
+        {{ college.name }} already keep a private list here.
+      {% else %}
+        Be the first from {{ college.name }} to keep a private list.
+      {% endif %}
+      No one is ever told who you picked.
+    </p>
+    <div class="btn-row">
+      <a class="btn btn-primary" href="{% if user.is_authenticated %}{{ college.join_path }}{% else %}{{ college.join_path }}{% endif %}">
+        Join {{ college.name }}
+      </a>
+      <a class="btn" href="{% url 'core:how_it_works' %}">How it works</a>
+    </div>
+  </div>
+
+  <div class="paper">
+    <p class="muted" style="margin:0 0 14px">Share this card to invite your college:</p>
+    <div class="share-card">
+      <span class="share-kicker">&nbsp;</span>
+      <div>
+        <h2 class="share-title">Your secret crush could be someone here.</h2>
+        <p class="muted" style="margin-top:10px">
+          Only a <strong>mutual</strong> match is ever revealed — and only
+          after a human verifies it.
+        </p>
+      </div>
+      <span class="share-foot">whoismycrush.com{{ college.join_path }}</span>
+    </div>
+    <div class="share-actions">
+      <button class="btn" type="button" data-copy>Copy link</button>
+      <a class="btn" href="{{ college.join_path }}">Open join page</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var copyBtn = document.querySelector("[data-copy]");
+  if (copyBtn) {
+    var url = window.location.origin + "{{ college.join_path|escapejs }}";
+    copyBtn.addEventListener("click", function () {
+      navigator.clipboard.writeText(url).then(function () {
+        var old = copyBtn.textContent;
+        copyBtn.textContent = "Copied!";
+        setTimeout(function () { copyBtn.textContent = old; }, 1500);
+      });
+    });
+  }
+</script>
+{% endblock %}

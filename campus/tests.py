@@ -681,3 +681,66 @@ class EveryPageSmokeTests(TestCase):
         for blocked in ["/desk/", "/secret/", "/matches/", "/notifications/"]:
             with self.subTest(blocked=blocked):
                 self.assertIn(f"Disallow: {blocked}", body)
+
+
+class CollegeGrowthTests(TestCase):
+    """Shareable college landing + join links (growth)."""
+
+    def setUp(self):
+        self.college = College.objects.create(
+            name="Tilka Manjhi Bhagalpur University"
+        )
+
+    def test_slug_is_derived_from_name(self):
+        self.assertTrue(self.college.slug)
+        self.assertIn("tilka-manjhi", self.college.slug)
+
+    def test_slug_stays_unique_across_similar_names(self):
+        other = College.objects.create(name="Tilka Manjhi Bhagalpur University 2")
+        self.assertNotEqual(other.slug, self.college.slug)
+
+    def test_landing_shows_college_but_no_student_directory(self):
+        response = self.client.get(reverse("campus:college_landing", args=[self.college.slug]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.college.name)
+        self.assertNotContains(response, "StudentProfile")
+
+    def test_landing_is_noindex_while_thin(self):
+        response = self.client.get(reverse("campus:college_landing", args=[self.college.slug]))
+        self.assertContains(response, "noindex,nofollow")
+
+    def test_landing_is_indexable_after_traction(self):
+        make_student(self.college, "24abc001")
+        make_student(self.college, "24abc002")
+        make_student(self.college, "24abc003")
+        make_student(self.college, "24abc004")
+        make_student(self.college, "24abc005")
+        response = self.client.get(reverse("campus:college_landing", args=[self.college.slug]))
+        self.assertContains(response, "index,follow")
+
+    def test_unknown_college_is_404(self):
+        response = self.client.get(reverse("campus:college_landing", args=["nope"]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_join_preselects_campus_for_anonymous_user(self):
+        response = self.client.get(reverse("campus:join", args=[self.college.slug]))
+        self.assertRedirects(response, reverse("accounts:register"))
+        self.assertEqual(self.client.session.get("campus_id"), self.college.pk)
+
+    def test_join_for_new_authenticated_user_goes_to_identity(self):
+        user = User.objects.create_user(
+            username="new@example.edu", email="new@example.edu", password="x"
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse("campus:join", args=[self.college.slug]))
+        self.assertRedirects(response, reverse("campus:identity"))
+
+    def test_join_for_existing_student_goes_to_dashboard(self):
+        student = make_student(self.college, "24abc099")
+        self.client.force_login(student.user)
+        response = self.client.get(reverse("campus:join", args=[self.college.slug]))
+        self.assertRedirects(response, reverse("campus:dashboard"))
+
+    def test_landing_does_not_index_college_slugs(self):
+        xml = self.client.get("/sitemap.xml").content.decode()
+        self.assertNotIn(f"/college/{self.college.slug}", xml)

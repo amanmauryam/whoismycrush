@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow prose">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span> <span>College crush</span>
+  </div>
+
+  <h1>College crush, kept on campus</h1>
+  <p class="lede">
+    A college crush is a small, real world: the same lectures, the same
+    canteen, the same notice board. WhoIsMyCrush keeps the whole game inside
+    that world.
+  </p>
+
+  <h2>Why campus-only makes a match mean more</h2>
+  <p>
+    A match only ever forms between two students at the same college. That one
+    rule changes everything. There's no stranger from the internet on the other
+    end of a match — it's someone who could be in your next class. It also
+    makes verification sane: a matcher can trust campus and roll number instead
+    of guessing from a name.
+  </p>
+
+  <h2>One campus identity, verified</h2>
+  <ul>
+    <li>You build a private campus ID with your roll number.</li>
+    <li>Only one active identity per student per campus.</li>
+    <li>Other students never see your full roll number — at most the last
+      three digits.</li>
+  </ul>
+
+  <h2>Bring your campus in</h2>
+  <p>
+    If your college isn't on the platform yet, you can add it in a few seconds
+    when you sign up. Every other student who searches for it will find it
+    after you. The more of your campus joins, the more a match means.
+  </p>
+
+  <div class="prose-cta">
+    <a class="btn btn-primary" href="{% url 'campus:campus_select' %}">Find my college</a>
+    {% if user.is_authenticated %}
+      <a class="btn" href="{% url 'campus:invite' %}">Invite my campus</a>
+    {% else %}
+      <a class="btn" href="{% url 'core:how_it_works' %}">How it works</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

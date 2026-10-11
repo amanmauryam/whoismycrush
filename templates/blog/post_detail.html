@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<article class="container narrow article">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span>
+    <a href="{% url 'blog:post_list' %}">Blog</a> <span>→</span>
+    <span>{{ post.title }}</span>
+  </div>
+
+  <header class="page-head">
+    <h1>{{ post.title }}</h1>
+    <p class="post-meta">
+      {{ post.published_at|date:"F j, Y" }} · {{ post.reading_minutes }} min read
+      {% if post.author_name %} · {{ post.author_name }}{% endif %}
+    </p>
+  </header>
+
+  {% if post.featured_image %}
+    <img src="{{ post.featured_image.url }}" alt="{{ post.title }}" class="post-hero">
+  {% endif %}
+
+  <div class="article-body prose">
+    {{ post.body_html|safe }}
+  </div>
+
+  {% if related %}
+    <hr>
+    <h2>Keep reading</h2>
+    <div class="blog-grid">
+      {% for item in related %}
+        <a class="post-card" href="{{ item.get_absolute_url }}">
+          <span class="post-meta">{{ item.published_at|date:"F j, Y" }}</span>
+          <h3>{{ item.title }}</h3>
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="prose-cta">
+    <a class="btn btn-primary" href="{% if user.is_authenticated and has_campus_id %}{% url 'campus:secret' %}{% else %}{% url 'accounts:register' %}{% endif %}">Enter your campus</a>
+    <a class="btn" href="{% url 'blog:post_list' %}">All posts</a>
+  </div>
+</article>
+{% endblock %}

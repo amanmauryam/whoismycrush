@@ -32,8 +32,7 @@ MATCH_BODY = """Hi {name},
 
 Someone you secretly selected also secretly selected you.
 
-An admin has verified that both sides really were the same person, so this one
-is confirmed mutual.
+Our team checked both sides carefully, and this one is confirmed mutual.
 
 Your secret is still safe. Nobody can see your list, your priorities, or who
 else you picked.

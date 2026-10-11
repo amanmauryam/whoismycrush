@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow prose">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span> <span>Safety</span>
+  </div>
+
+  <h1>Safety guidelines</h1>
+  <p class="lede">
+    A private game is only fun when everyone feels safe. Here is how we try to
+    keep it that way — and what we ask of you.
+  </p>
+
+  <h2>What we do</h2>
+  <ul>
+    <li><strong>Verify every match.</strong> A person approves each mutual
+      crush before either side is notified.</li>
+    <li><strong>Keep lists and priorities private.</strong> No student can ever
+      see another student's entries or order.</li>
+    <li><strong>Require consent to reveal.</strong> Identities appear only when
+      both sides agree, and either side can close a match.</li>
+    <li><strong>Let you block and report.</strong> Blocking hides you from each
+      other and retires any related entries silently.</li>
+    <li><strong>Limit abuse.</strong> Sensitive actions are rate-limited, and
+      duplicate campus identities are blocked.</li>
+  </ul>
+
+  <h2>What we ask of you</h2>
+  <ul>
+    <li>Only add people you genuinely know from your campus.</li>
+    <li>Don't use the product to pressure, expose or harass anyone.</li>
+    <li>Don't create more than one campus identity.</li>
+    <li>Report anything that feels wrong — reports are private.</li>
+  </ul>
+
+  <h2>If you feel unsafe</h2>
+  <p>
+    Contact your campus authorities or local emergency services first if you
+    are in immediate danger. Within the product, block the person and file a
+    report; reports are reviewed and repeat misuse ends the account.
+  </p>
+
+  <div class="prose-cta">
+    <a class="btn btn-primary" href="{% url 'core:contact' %}">Contact us</a>
+    <a class="btn" href="{% url 'core:privacy_policy' %}">Privacy policy</a>
+  </div>
+</div>
+{% endblock %}

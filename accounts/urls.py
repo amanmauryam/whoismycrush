@@ -24,4 +24,20 @@ urlpatterns = [
         views.ResetPasswordCompleteView.as_view(),
         name="password_reset_complete",
     ),
+    # email verification
+    path(
+        "verify-email/",
+        views.verify_email_notice,
+        name="verify_email_notice",
+    ),
+    path(
+        "verify-email/resend/",
+        views.resend_verification,
+        name="resend_verification",
+    ),
+    path(
+        "verify-email/<uidb64>/<token>/",
+        views.verify_email,
+        name="verify_email",
+    ),
 ]

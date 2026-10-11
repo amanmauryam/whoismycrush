@@ -17,9 +17,10 @@ from .services import ApprovalError, approve_potential_match, reject_potential_m
 
 @admin.register(College)
 class CollegeAdmin(admin.ModelAdmin):
-    list_display = ("name", "city", "state", "is_active", "created_at")
+    list_display = ("name", "slug", "city", "state", "is_active", "created_at")
     list_filter = ("is_active", "state")
-    search_fields = ("name", "city", "state", "domain")
+    search_fields = ("name", "slug", "city", "state", "domain")
+    prepopulated_fields = {"slug": ("name",)}
     list_editable = ("is_active",)
 
 

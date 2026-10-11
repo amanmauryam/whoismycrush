@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow prose">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span> <span>Mutual crush</span>
+  </div>
+
+  <h1>What is a mutual crush?</h1>
+  <p class="lede">
+    A mutual crush is when you both picked each other. On WhoIsMyCrush, that's
+    the one and only moment anything is ever revealed — and only after a real
+    person confirms it.
+  </p>
+
+  <h2>How a mutual crush is confirmed</h2>
+  <ol class="steps">
+    <li class="step">
+      <span class="step-num">01 — MATCH</span>
+      <h3>Campus and roll number line up</h3>
+      <p>Your entry and their identity have to agree on both. A similar name
+        is never enough on its own.</p>
+    </li>
+    <li class="step">
+      <span class="step-num">02 — VERIFY</span>
+      <h3>A human reviews the pair</h3>
+      <p>An admin checks the details before either of you hears anything. This
+        is what stops two people with the same roll number from being fused.</p>
+    </li>
+    <li class="step">
+      <span class="step-num">03 — NOTIFY</span>
+      <h3>You both get one quiet alert</h3>
+      <p>No name yet, no order, no "they liked you more". Just: it's mutual.</p>
+    </li>
+    <li class="step">
+      <span class="step-num">04 — REVEAL</span>
+      <h3>Only if you both choose it</h3>
+      <p>Identities appear only when both sides press reveal. Either of you can
+        stay anonymous or close the match.</p>
+    </li>
+  </ol>
+
+  <h2>What stays hidden, even after a match</h2>
+  <ul>
+    <li>Who picked whom first.</li>
+    <li>Whether either of you was a #1, #2 or #3.</li>
+    <li>Who else either of you picked.</li>
+    <li>Any private note made during verification.</li>
+  </ul>
+
+  <div class="prose-cta">
+    <a class="btn btn-primary" href="{% if user.is_authenticated and has_campus_id %}{% url 'campus:secret' %}{% else %}{% url 'accounts:register' %}{% endif %}">
+      Start my secret list
+    </a>
+    <a class="btn" href="{% url 'core:how_it_works' %}">See the full flow</a>
+  </div>
+</div>
+{% endblock %}

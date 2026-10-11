@@ -1221,3 +1221,303 @@
     flex: none;
   }
 }
+
+/* ==========================================================================
+   13. Email verification banner
+   ========================================================================== */
+
+.verify-banner {
+  background: var(--yellow);
+  border-bottom: var(--border) solid var(--rule);
+}
+
+.verify-banner-inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding-block: 9px;
+}
+
+.verify-banner-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   14. FAQ accordion
+   ========================================================================== */
+
+.faq-group {
+  margin-top: 30px;
+}
+
+.faq-item {
+  background: var(--white);
+  border: var(--border) solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+  margin-bottom: 10px;
+}
+
+.faq-item summary {
+  cursor: pointer;
+  padding: 14px 16px;
+  font-weight: 800;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-item summary::after {
+  content: "+";
+  font-family: var(--hand);
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.faq-item[open] summary::after {
+  content: "–";
+}
+
+.faq-item p {
+  margin: 0;
+  padding: 0 16px 16px;
+  color: var(--ink-70);
+}
+
+/* ==========================================================================
+   15. Blog + guides
+   ========================================================================== */
+
+.blog-grid {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.post-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--white);
+  border: var(--border) solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 20px 18px;
+  text-decoration: none;
+}
+
+.post-card h2 {
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+.post-card .post-meta,
+.post-meta {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.post-card p {
+  margin: 0;
+  color: var(--ink-70);
+  font-size: 0.92rem;
+}
+
+.post-card .read {
+  margin-top: auto;
+  font-weight: 800;
+  color: var(--red-ink);
+}
+
+.article {
+  max-width: 68ch;
+}
+
+.article-body {
+  font-size: 1.03rem;
+}
+
+.article-body h2 {
+  margin-top: 1.6em;
+}
+
+.article-body h3 {
+  margin-top: 1.4em;
+}
+
+.article-body ul,
+.article-body ol {
+  padding-left: 1.2em;
+}
+
+.article-body li {
+  margin-bottom: 0.4em;
+}
+
+.article-body img {
+  border: var(--border) solid var(--rule);
+  border-radius: var(--radius);
+}
+
+.article-body blockquote {
+  margin: 1.4em 0;
+  padding: 10px 16px;
+  border-left: 4px solid var(--red);
+  background: var(--paper-2);
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 30px;
+}
+
+.pagination .page-link {
+  padding: 8px 14px;
+  background: var(--white);
+  border: var(--border) solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.pagination .is-current {
+  font-weight: 800;
+}
+
+/* ==========================================================================
+   16. Growth: college landing, join, share cards
+   ========================================================================== */
+
+.join-hero {
+  text-align: center;
+  padding-block: clamp(30px, 7vw, 64px);
+}
+
+.join-hero .college-name {
+  display: inline-block;
+  margin: 4px 0 10px;
+  padding: 4px 12px;
+  background: var(--yellow);
+  border: var(--border) solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.share-card {
+  position: relative;
+  width: min(100%, 360px);
+  margin: 0 auto;
+  aspect-ratio: 4 / 5;
+  padding: 26px 22px;
+  background: var(--white);
+  border: var(--border) solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+}
+
+.share-card .share-kicker {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.share-card .share-title {
+  font-size: clamp(1.6rem, 1.2rem + 3vw, 2.4rem);
+  font-weight: 800;
+  line-height: 1.05;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.share-card .share-foot {
+  font-family: var(--hand);
+  font-size: 1.3rem;
+}
+
+.share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+/* ==========================================================================
+   17. Roses (optional, currently disabled)
+   ========================================================================== */
+
+.rose-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.rose-card {
+  position: relative;
+  text-align: center;
+  padding: 16px 12px;
+  background: var(--paper-2);
+  border: var(--border) dashed var(--rule-soft);
+  border-radius: var(--radius);
+  color: var(--muted);
+}
+
+.rose-card .rose-emoji {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.rose-card .rose-name {
+  display: block;
+  margin-top: 8px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.rose-card .rose-price {
+  display: block;
+  font-size: 0.85rem;
+}
+
+.rose-card .rose-flag {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 2px 8px;
+  background: var(--yellow);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
+}

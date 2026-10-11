@@ -1,19 +1,25 @@
-{% load static humanize %}<!DOCTYPE html>
+{% load static humanize seo %}<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}{{ page_title|default:"Who is your crush?" }}{% endblock %} · {{ SITE_NAME }}</title>
   <meta name="description" content="{% block meta_description %}{{ meta_description|default:"Secretly pick up to 3 people from your college. Nobody will know — unless they picked you too." }}{% endblock %}">
-  {% block robots %}{% if can_index is False %}<meta name="robots" content="noindex,nofollow">{% else %}<meta name="robots" content="index,follow">{% endif %}{% endblock %}
-  <link rel="canonical" href="{{ SITE_URL }}{% block canonical %}{{ canonical_path|default:request.path }}{% endblock %}">
+  {% block robots %}{% if can_index is False %}<meta name="robots" content="noindex,nofollow">{% else %}<meta name="robots" content="index,follow,max-image-preview:large">{% endif %}{% endblock %}
+  <link rel="canonical" href="{% block canonical %}{% if canonical_path|slice:':4' == 'http' %}{{ canonical_path }}{% else %}{{ SITE_URL }}{{ canonical_path|default:request.path }}{% endif %}{% endblock %}">
 
   <meta property="og:site_name" content="{{ SITE_NAME }}">
-  <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+  <meta property="og:type" content="{% block og_type %}{{ og_type|default:"website" }}{% endblock %}">
   <meta property="og:title" content="{{ page_title|default:'Who is your crush?' }} · {{ SITE_NAME }}">
   <meta property="og:description" content="{{ meta_description|default:'Secretly pick up to 3 people from your college. We only tell you when it is mutual.' }}">
-  <meta property="og:url" content="{{ SITE_URL }}{{ canonical_path|default:request.path }}">
-  <meta name="twitter:card" content="summary">
+  <meta property="og:url" content="{% if canonical_path|slice:':4' == 'http' %}{{ canonical_path }}{% else %}{{ SITE_URL }}{{ canonical_path|default:request.path }}{% endif %}">
+  <meta property="og:image" content="{% block og_image %}{{ SITE_URL }}{% if og_image_path %}{{ og_image_path }}{% else %}{% static 'img/og-default.png' %}{% endif %}{% endblock %}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ page_title|default:'Who is your crush?' }} · {{ SITE_NAME }}">
+  <meta name="twitter:description" content="{{ meta_description|default:'Secretly pick up to 3 people from your college. We only tell you when it is mutual.' }}">
+  <meta name="twitter:image" content="{% block twitter_image %}{{ SITE_URL }}{% if og_image_path %}{{ og_image_path }}{% else %}{% static 'img/og-default.png' %}{% endif %}{% endblock %}">
   <meta name="theme-color" content="#F7F6F1">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,8 +28,13 @@
   <link rel="stylesheet" href="{% static 'css/board.css' %}">
   <link rel="stylesheet" href="{% static 'css/pages.css' %}">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23FFF05A' stroke='%23111' stroke-width='8'/><text y='72' x='50' font-size='56' text-anchor='middle' fill='%23111' font-family='sans-serif' font-weight='bold'>?</text></svg>">
+  {{ site_structured_data|jsonld }}
+  {% block structured_data %}{{ structured_data|jsonld }}{% endblock %}
   {% block head %}{% endblock %}
   <script src="{% static 'js/board.js' %}" defer></script>
+  {% if analytics_enabled and analytics_domain %}
+  <script defer data-domain="{{ analytics_domain }}" src="https://plausible.io/js/script.js"></script>
+  {% endif %}
   {% block scripts %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -36,6 +47,22 @@
     {% for message in messages %}
       <div class="toast{% if message.tags == 'error' %} toast-error{% endif %}">{{ message }}</div>
     {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if user.is_authenticated and not email_verified and not email_verification_pending_page %}
+  <div class="verify-banner" role="status">
+    <div class="container verify-banner-inner">
+      <span class="verify-banner-text">
+        {% include "components/icon.html" with name="envelope" size=15 %}
+        Confirm your email to secure your account.
+      </span>
+      <form method="post" action="{% url 'accounts:resend_verification' %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <button class="btn btn-sm" type="submit">Resend link</button>
+      </form>
+    </div>
   </div>
   {% endif %}
 

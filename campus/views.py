@@ -12,6 +12,9 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 
+from config import seo
+from config.ratelimit import ratelimit
+
 from .forms import (
     BlockForm,
     CampusChoiceForm,
@@ -197,6 +200,7 @@ class CampusSelectView(TemplateView):
 
 
 @require_POST
+@ratelimit(key="ip", rate="10/h")
 def add_college(request):
     """Let a candidate add a college that is missing from the picker.
 
@@ -360,6 +364,7 @@ def secret_desk(request):
 
 @student_required
 @require_POST
+@ratelimit(key="user", rate="30/h")
 def add_crush(request, slot=None):
     """Save one slot from the typed form. The crush need not be registered."""
 
@@ -390,6 +395,7 @@ def add_crush(request, slot=None):
 
 @student_required
 @require_POST
+@ratelimit(key="user", rate="60/h")
 def edit_crush(request, pk):
     """Update a saved slot in place, keeping its priority."""
 
@@ -625,6 +631,7 @@ def match_detail(request, pk):
 
 @student_required
 @require_POST
+@ratelimit(key="user", rate="40/h")
 def reveal_choice(request, pk):
     student = _student(request.user)
     match = get_object_or_404(MutualMatch, pk=pk)
@@ -797,8 +804,57 @@ class InviteCollegeView(TemplateView):
         return render(request, self.template_name, context)
 
 
+class CollegeLandingView(TemplateView):
+    """Public, shareable page for one campus (growth).
+
+    Deliberately not a directory: it shows the college name and how many
+    students have joined, but never a list of people. Thin campuses are
+    marked ``noindex`` so search engines are not fed near-empty pages that
+    would also leak campus names (design.md 54).
+    """
+
+    template_name = "campus/college_landing.html"
+
+    def get_context_data(self, **kwargs):
+        college = get_object_or_404(
+            College, slug=self.kwargs["slug"], is_active=True
+        )
+        count = college.student_count()
+        return {
+            **super().get_context_data(**kwargs),
+            "college": college,
+            "member_count": count,
+            "can_index": count >= 5,
+            "page_title": f"Secret crushes at {college.name}",
+            "meta_description": (
+                f"Join {college.display_name} on WhoIsMyCrush. Add your secret "
+                "crushes privately and only find out when it is mutual."
+            ),
+            "canonical_path": college.get_absolute_url(),
+            "structured_data": [
+                seo.breadcrumb(
+                    [("Home", "/"), (college.name, college.get_absolute_url())]
+                )
+            ],
+        }
+
+
+def join_college(request, slug):
+    """Shareable invite link: preselect a campus, then start onboarding."""
+
+    college = get_object_or_404(College, slug=slug, is_active=True)
+    request.session["campus_id"] = college.pk
+    if request.user.is_authenticated:
+        if _student(request.user) is None:
+            return redirect("campus:identity")
+        return redirect("campus:dashboard")
+    messages.info(request, f"Create your profile to join {college.name}.")
+    return redirect("accounts:register")
+
+
 @student_required
 @require_POST
+@ratelimit(key="user", rate="20/h")
 def report_student(request, pk):
     student = _student(request.user)
     reported = get_object_or_404(StudentProfile, pk=pk, college=student.college)
@@ -817,6 +873,7 @@ def report_student(request, pk):
 
 @student_required
 @require_POST
+@ratelimit(key="user", rate="20/h")
 def block_student(request, pk):
     student = _student(request.user)
     blocked = get_object_or_404(StudentProfile, pk=pk, college=student.college)

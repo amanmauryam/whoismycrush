@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span> <span>Blog</span>
+  </div>
+
+  <div class="page-head">
+    <h1>Blog</h1>
+    <p>Notes on secret crushes, college crushes and keeping things private.</p>
+  </div>
+
+  {% if posts %}
+    <div class="blog-grid">
+      {% for post in posts %}
+        <a class="post-card" href="{{ post.get_absolute_url }}">
+          <span class="post-meta">
+            {{ post.published_at|date:"F j, Y" }} · {{ post.reading_minutes }} min read
+          </span>
+          <h2>{{ post.title }}</h2>
+          <p>{{ post.excerpt }}</p>
+          <span class="read">Read →</span>
+        </a>
+      {% endfor %}
+    </div>
+
+    {% if is_paginated %}
+      <nav class="pagination" aria-label="Pagination">
+        {% if page_obj.has_previous %}
+          <a class="page-link" href="?page={{ page_obj.previous_page_number }}">← Newer</a>
+        {% endif %}
+        <span class="is-current">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+          <a class="page-link" href="?page={{ page_obj.next_page_number }}">Older →</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+  {% else %}
+    <div class="paper" style="text-align:center">
+      <p class="muted">No posts yet. Check back soon.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

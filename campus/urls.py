@@ -49,6 +49,8 @@ urlpatterns = [
     path("notifications/read/", views.mark_read, name="mark_all_read"),
     path("notifications/<int:pk>/read/", views.mark_read, name="mark_read"),
     # safety + growth
+    path("college/<slug:slug>/", views.CollegeLandingView.as_view(), name="college_landing"),
+    path("join/<slug:slug>/", views.join_college, name="join"),
     path("invite/", views.InviteCollegeView.as_view(), name="invite"),
     path("report/<int:pk>/", views.report_student, name="report"),
     path("block/<int:pk>/", views.block_student, name="block"),

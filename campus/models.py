@@ -10,6 +10,7 @@ from django.db import models
 from django.db.models import F, Q
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.text import slugify
 
 MAX_CRUSHES = 3
 
@@ -72,6 +73,12 @@ class College(models.Model):
     """A campus / community. Crushes never cross this boundary."""
 
     name = models.CharField(max_length=180, unique=True)
+    slug = models.SlugField(
+        max_length=200,
+        unique=True,
+        blank=True,
+        help_text="Public URL fragment, derived from the name.",
+    )
     city = models.CharField(max_length=120, blank=True)
     state = models.CharField(max_length=120, blank=True)
     domain = models.CharField(
@@ -88,6 +95,27 @@ class College(models.Model):
 
     def __str__(self) -> str:
         return self.display_name
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = self._unique_slug()
+        super().save(*args, **kwargs)
+
+    def _unique_slug(self) -> str:
+        base = slugify(self.name)[:180] or "campus"
+        candidate = base
+        suffix = 2
+        while College.objects.filter(slug=candidate).exclude(pk=self.pk).exists():
+            candidate = f"{base}-{suffix}"
+            suffix += 1
+        return candidate
+
+    def get_absolute_url(self) -> str:
+        return reverse("campus:college_landing", kwargs={"slug": self.slug})
+
+    @property
+    def join_path(self) -> str:
+        return reverse("campus:join", kwargs={"slug": self.slug})
 
     @property
     def display_name(self) -> str:

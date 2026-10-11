@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block robots %}<meta name="robots" content="noindex,nofollow">{% endblock %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="page-head">
+    <h1>Almost there</h1>
+    <p>Confirm your email to keep going.</p>
+  </div>
+
+  <div class="paper">
+    <span class="stamp">ONE STEP</span>
+    <h2 style="margin-top:12px">Check your inbox</h2>
+    <p class="muted">
+      We sent a confirmation link to your email. Open it to finish unlocking
+      your secret desk.
+    </p>
+
+    <form method="post" action="{% url 'accounts:resend_verification' %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.path }}">
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Resend the link</button>
+        <a class="btn" href="{% url 'core:contact' %}">Need help?</a>
+      </div>
+    </form>
+  </div>
+
+  <form method="post" action="{% url 'accounts:logout' %}" style="margin-top:18px">
+    {% csrf_token %}
+    <button class="btn btn-sm" type="submit">Sign out</button>
+  </form>
+</div>
+{% endblock %}

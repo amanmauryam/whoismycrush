@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow prose">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span> <span>FAQ</span>
+  </div>
+
+  <h1>Frequently asked questions</h1>
+  <p class="lede">Short, honest answers. If something is missing, <a href="{% url 'core:contact' %}">tell us</a>.</p>
+
+  {% for group in faq_groups %}
+    <section class="faq-group">
+      <h2>{{ group.title }}</h2>
+      {% for question, answer in group.items %}
+        <details class="faq-item">
+          <summary>{{ question }}</summary>
+          <p>{{ answer }}</p>
+        </details>
+      {% endfor %}
+    </section>
+  {% endfor %}
+
+  <div class="prose-cta">
+    <a class="btn btn-primary" href="{% if user.is_authenticated and has_campus_id %}{% url 'campus:secret' %}{% else %}{% url 'accounts:register' %}{% endif %}">Enter your campus</a>
+    <a class="btn" href="{% url 'core:contact' %}">Ask something else</a>
+  </div>
+</div>
+{% endblock %}

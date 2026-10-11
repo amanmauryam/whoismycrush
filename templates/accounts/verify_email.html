@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block robots %}<meta name="robots" content="noindex,nofollow">{% endblock %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="page-head">
+    <h1>Confirm your<br>email</h1>
+    <p>One tap and your account is fully yours.</p>
+  </div>
+
+  <div class="paper">
+    {% if valid %}
+      <p class="lede">Tap the button to confirm this address belongs to you.</p>
+      <form method="post">
+        {% csrf_token %}
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">
+            {% include "components/icon.html" with name="check" size=16 %} Confirm my email
+          </button>
+          <a class="btn" href="{% url 'campus:landing' %}">Back to home</a>
+        </div>
+      </form>
+    {% else %}
+      <span class="stamp stamp-ink">LINK EXPIRED</span>
+      <h2 style="margin-top:14px">That link didn't work</h2>
+      <p class="muted">
+        It may have expired or already been used. Sign in and we'll send a fresh
+        one from your account page.
+      </p>
+      <div class="form-actions">
+        <a class="btn btn-primary" href="{% url 'accounts:login' %}">Sign in</a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
