@@ -1,0 +1,49 @@
+{% load static humanize %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}{{ page_title|default:"Who is your crush?" }}{% endblock %} · {{ SITE_NAME }}</title>
+  <meta name="description" content="{% block meta_description %}{{ meta_description|default:"Secretly pick up to 3 people from your college. Nobody will know — unless they picked you too." }}{% endblock %}">
+  {% block robots %}{% if can_index is False %}<meta name="robots" content="noindex,nofollow">{% else %}<meta name="robots" content="index,follow">{% endif %}{% endblock %}
+  <link rel="canonical" href="{{ SITE_URL }}{% block canonical %}{{ canonical_path|default:request.path }}{% endblock %}">
+
+  <meta property="og:site_name" content="{{ SITE_NAME }}">
+  <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+  <meta property="og:title" content="{{ page_title|default:'Who is your crush?' }} · {{ SITE_NAME }}">
+  <meta property="og:description" content="{{ meta_description|default:'Secretly pick up to 3 people from your college. We only tell you when it is mutual.' }}">
+  <meta property="og:url" content="{{ SITE_URL }}{{ canonical_path|default:request.path }}">
+  <meta name="twitter:card" content="summary">
+  <meta name="theme-color" content="#F7F6F1">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/board.css' %}">
+  <link rel="stylesheet" href="{% static 'css/pages.css' %}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23FFF05A' stroke='%23111' stroke-width='8'/><text y='72' x='50' font-size='56' text-anchor='middle' fill='%23111' font-family='sans-serif' font-weight='bold'>?</text></svg>">
+  {% block head %}{% endblock %}
+  <script src="{% static 'js/board.js' %}" defer></script>
+  {% block scripts %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  {% include "components/navbar.html" %}
+
+  {% if messages %}
+  <div class="messages" aria-live="polite">
+    {% for message in messages %}
+      <div class="toast{% if message.tags == 'error' %} toast-error{% endif %}">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <main id="main">
+    {% block content %}{% endblock %}
+  </main>
+
+  {% include "components/footer.html" %}
+  {% include "components/bottom_nav.html" %}
+</body>
+</html>

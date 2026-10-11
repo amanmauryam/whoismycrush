@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span> <span>How it works</span>
+  </div>
+
+  <div class="page-head">
+    <h1>Pick. Wait.<br>Mystery. Mutual.</h1>
+    <p class="lede">Six steps, and not one of them involves a swipe.</p>
+  </div>
+
+  <ol class="steps">
+    <li class="step">
+      <span class="step-num">01 — PICK</span>
+      <h3>Add up to 3 people</h3>
+      <p>Type their name and roll number by hand — there is no student search. You can't add yourself, and entries only ever match inside your own campus.</p>
+    </li>
+    <li class="step">
+      <span class="step-num">02 — SEAL</span>
+      <h3>We fold the list into an envelope</h3>
+      <p>Your picks are locked. Not even we can tell you who picked whom first.</p>
+    </li>
+    <li class="step">
+      <span class="step-num">03 — WAIT</span>
+      <h3>Nothing happens. That's the point.</h3>
+      <p>Nobody is notified. No badge, no counter, no "X saw your profile". Silence is the feature.</p>
+    </li>
+    <li class="step">
+      <span class="step-num">04 — MUTUAL</span>
+      <h3>If they added you too</h3>
+      <p>A real person checks the details before anything is confirmed. Only then do both of you get one notification: it's mutual.</p>
+    </li>
+    <li class="step">
+      <span class="step-num">05 — REVEAL</span>
+      <h3>You decide together</h3>
+      <p>Revealing only happens if both sides press reveal. Either of you can walk away and nothing breaks.</p>
+    </li>
+    <li class="step">
+      <span class="step-num">06 — OPTIONAL</span>
+      <h3>Send something small</h3>
+      <p>A rose, a note. Optional on purpose. Matching never costs anything.</p>
+    </li>
+  </ol>
+
+  <div class="paper" style="margin-top:34px">
+    <h2>What this is not</h2>
+    <ul>
+      <li>Not a swipe app.</li>
+      <li>Not a feed, a follower count, or a like counter.</li>
+      <li>Not a chat. There is no messaging in the MVP.</li>
+      <li>Not a public profile directory. Nobody can browse your campus roster.</li>
+    </ul>
+  </div>
+
+  <div class="btn-row" style="margin-top:28px">
+    <a class="btn btn-primary" href="{% if user.is_authenticated and has_campus_id %}{% url 'campus:secret' %}{% else %}{% url 'accounts:register' %}{% endif %}">Enter your campus</a>
+    <a class="btn" href="{% url 'campus:privacy' %}">Read the privacy rules</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:dashboard' %}">Dashboard</a> <span>→</span> <span>Pending crush matches</span>
+  </div>
+
+  <div class="page-head">
+    <h1>Pending crush matches</h1>
+    <p>
+      Only reciprocal pairs appear here. Nothing is announced to either student
+      until you approve it, and a one-sided entry can never be a match.
+    </p>
+  </div>
+
+  <div class="notice-box">
+    {% include "components/icon.html" with name="shield" size=15 %}
+    Confidence is advisory. Check both identities against the roll number and
+    campus before approving.
+  </div>
+
+  {% if pairs %}
+    <div class="paper" style="margin-top:20px">
+      <table class="review-table">
+        <thead>
+          <tr>
+            <th scope="col">Person A typed</th>
+            <th scope="col">Person B typed</th>
+            <th scope="col">Campus</th>
+            <th scope="col">Confidence</th>
+            <th scope="col"><span class="sr-only">Review</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pair in pairs %}
+            <tr>
+              <td>
+                <strong>{{ pair.forward.author.full_name }}</strong>
+                <span class="muted"> entered </span>
+                <strong>{{ pair.forward.crush_entry.full_name }}</strong>
+              </td>
+              <td>
+                <strong>{{ pair.backward.author.full_name }}</strong>
+                <span class="muted"> entered </span>
+                <strong>{{ pair.backward.crush_entry.full_name }}</strong>
+              </td>
+              <td>{{ pair.forward.crush_entry.college.name }}</td>
+              <td>
+                {% if pair.confidence %}
+                  {{ pair.confidence|floatformat:0 }}%
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>
+                <a class="btn btn-sm" href="{% url 'campus:pending_match_detail' pair.forward.pk %}">
+                  Review
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <span class="doodle" aria-hidden="true">✓</span>
+      <h2>All clear</h2>
+      <p class="muted">No pending reciprocal pairs to verify right now.</p>
+    </div>
+  {% endif %}
+
+  {% if unpaired %}
+    <section class="section" style="margin-top:32px">
+      <h2 class="tiny-label">One-sided entries ({{ unpaired|length }})</h2>
+      <p class="muted small">
+        These are not matches yet — the other person has not entered them back.
+        Listed only for completeness; you cannot approve them.
+      </p>
+      <ul class="review-list">
+        {% for match in unpaired %}
+          <li>
+            <strong>{{ match.author.full_name }}</strong> entered
+            <strong>{{ match.crush_entry.full_name }}</strong>
+            <span class="muted">({{ match.crush_entry.get_course_display }} · {{ match.crush_entry.year }})</span>
+            <span class="muted">— no reciprocal entry</span>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
+  {% if recently_approved %}
+    <section class="section">
+      <h2 class="tiny-label">Recently approved</h2>
+      <ul class="review-list">
+        {% for match in recently_approved %}
+          <li>
+            <span class="stamp stamp-green">APPROVED</span>
+            {{ match.author.full_name }} → {{ match.registered_student.full_name }}
+            <span class="muted">by {{ match.verified_by|default:"—" }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
+  {% if recently_rejected %}
+    <section class="section">
+      <h2 class="tiny-label">Recently rejected</h2>
+      <ul class="review-list">
+        {% for match in recently_rejected %}
+          <li>
+            <span class="stamp">REJECTED</span>
+            {{ match.author.full_name }} → {{ match.registered_student.full_name }}
+            <span class="muted">by {{ match.verified_by|default:"—" }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+</div>
+{% endblock %}

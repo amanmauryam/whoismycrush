@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block body_class %}page-landing{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="container">
+    <div class="hero-split">
+      <div>
+        <span class="hero-kicker">Secret campus board <span class="doodle">✦</span></span>
+
+        <h1 class="hero-title">Who is<br>your <span class="accent">crush?</span></h1>
+
+        <p class="hero-sub">psst... you might be someone's crush too <span class="doodle">👀</span></p>
+
+        <p class="hero-lede">
+          Secretly pick up to 3 people from your college. Keep it secret.
+          We'll only tell you when it's mutual.
+        </p>
+
+        <div class="hero-actions">
+          <a class="btn btn-lg btn-primary" href="{% if user.is_authenticated and has_campus_id %}{% url 'campus:secret' %}{% else %}{% url 'accounts:register' %}{% endif %}">
+            {% include "components/icon.html" with name="lock" size=18 %}
+            Find My Crush
+          </a>
+          <a class="btn" href="#how">How it works <span class="doodle">↓</span></a>
+        </div>
+
+        <p class="hero-privacy">
+          {% include "components/icon.html" with name="shield" size=16 %}
+          Your secrets stay private.
+        </p>
+      </div>
+
+      <aside class="hero-note" aria-label="A secret campus note">
+        <span class="tape" aria-hidden="true"></span>
+        <span class="note-label">SECRET CAMPUS NOTE</span>
+        <p>Pick up to 3 people.</p>
+        <p>Nobody will know.</p>
+        <p class="mystery">???</p>
+        <span class="stamp">PRIVATE</span>
+      </aside>
+    </div>
+
+    <dl class="hero-stats">
+      <div>
+        <dt>Campuses</dt>
+        <dd>{{ campus_count|default:"0" }}</dd>
+      </div>
+      <div>
+        <dt>Students</dt>
+        <dd>{{ student_count|default:"0" }}</dd>
+      </div>
+      <div>
+        <dt>Mutuals found</dt>
+        <dd>{{ match_count|default:"0" }}</dd>
+      </div>
+    </dl>
+  </div>
+</section>
+
+<section class="trust section">
+  <div class="container">
+    <span class="section-label">{% include "components/icon.html" with name="shield" size=14 %} Private by design</span>
+    <h2>Nobody can see your list</h2>
+    <p class="trust-lede">Your crush list stays hidden. Always.</p>
+
+    <ul class="trust-list">
+      <li><span class="tick">✓</span> Who you selected</li>
+      <li><span class="tick">✓</span> Your priorities — #1, #2 or #3 means nothing to anyone</li>
+      <li><span class="tick">✓</span> Who else you selected</li>
+      <li><span class="tick">✓</span> That you selected someone at all</li>
+    </ul>
+
+    <p class="trust-foot">We only tell you when it's mutual. Not before.</p>
+  </div>
+</section>
+
+<section class="section" id="how">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <span class="section-label">Three steps</span>
+        <h2>How it works</h2>
+      </div>
+      <span class="doodle" aria-hidden="true">✦ ? ♡ →</span>
+    </div>
+
+    <ol class="steps">
+      <li class="step">
+        <span class="step-num">01 — PICK</span>
+        <div class="step-visual" aria-hidden="true">{% include "components/icon.html" with name="id" size=44 %}</div>
+        <h3>Add up to 3 people</h3>
+        <p>Type their name and roll number by hand. There is no student search, and nobody is notified that you added them.</p>
+        <span class="step-outcome">Their ID stays sealed</span>
+      </li>
+
+      <li class="step">
+        <span class="step-num">02 — WAIT</span>
+        <div class="step-visual" aria-hidden="true">{% include "components/icon.html" with name="envelope" size=44 %}</div>
+        <h3>We seal your list</h3>
+        <p>Your entries fold into an envelope. They won't know you added them, and they'll never see your order.</p>
+        <span class="step-outcome">Envelope sealed</span>
+      </li>
+
+      <li class="step">
+        <span class="step-num">03 — MATCH</span>
+        <div class="step-visual" aria-hidden="true">{% include "components/icon.html" with name="heart" size=44 %}</div>
+        <h3>If they added you too</h3>
+        <p>You both stay anonymous. A person verifies every match before anyone is told, and reveal only happens when both of you choose it.</p>
+        <span class="step-outcome">♥ It's mutual</span>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <span class="section-label">The only rule</span>
+        <h2>Nobody will know.<br>Unless they picked you too.</h2>
+      </div>
+    </div>
+    <div class="paper">
+      <p class="lede">
+        This is not a dating app. There is no swiping, no feed, no likes, no chat, no followers.
+        Just a sealed list of three names and the possibility that one of them picked you back.
+      </p>
+      <span class="stamp stamp-ink">NOT A DATING APP</span>
+    </div>
+  </div>
+</section>
+
+<section class="cta-band">
+  <div class="container cta-inner">
+    <div>
+      <h2>Enter your campus</h2>
+      <p class="muted">Takes about a minute. Nobody will know.</p>
+    </div>
+    <div class="btn-row">
+      <a class="btn btn-primary" href="{% if user.is_authenticated and has_campus_id %}{% url 'campus:secret' %}{% else %}{% url 'accounts:register' %}{% endif %}">Enter your campus</a>
+      <a class="btn" href="{% url 'core:how_it_works' %}">How it works</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

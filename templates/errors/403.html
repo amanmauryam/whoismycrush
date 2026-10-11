@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Not available{% endblock %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="error-page">
+    <span class="doodle" aria-hidden="true">✦</span>
+    <p class="error-code">403</p>
+    <h1>Not available</h1>
+    <p class="muted">That envelope was never addressed to you.</p>
+    <div class="error-actions">
+      <a class="btn btn-primary" href="{% url 'campus:dashboard' %}">Go to my desk</a>
+      <a class="btn" href="{% url 'campus:landing' %}">Back to the board</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

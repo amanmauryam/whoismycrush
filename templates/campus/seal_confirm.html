@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:secret' %}">My secret</a> <span>→</span> <span>Lock</span>
+  </div>
+
+  <div class="page-head">
+    <h1>Ready to seal<br>your list?</h1>
+    <p>{{ count }} {% if count == 1 %}person{% else %}people{% endif %} selected. Once sealed, nobody can change or read it.</p>
+  </div>
+
+  <div class="paper">
+    <ul class="privacy-list">
+      <li>{% include "components/icon.html" with name="check" size=16 %} Nobody is notified that you picked them.</li>
+      <li>{% include "components/icon.html" with name="check" size=16 %} Your order stays internal. Forever.</li>
+      <li>{% include "components/icon.html" with name="check" size=16 %} You can wipe your list any time from the privacy centre.</li>
+    </ul>
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-actions">
+        <button class="btn btn-lg btn-primary btn-block" type="submit">
+          {% include "components/icon.html" with name="lock" size=18 %} Lock My Crushes
+        </button>
+        <a class="btn" href="{% url 'campus:secret' %}">Not yet</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

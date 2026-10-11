@@ -1,0 +1,42 @@
+{% load static %}
+<header class="site-header">
+  <div class="container nav">
+    <a class="brand" href="{% url 'campus:landing' %}">
+      <span class="brand-mark" aria-hidden="true">?</span>
+      <span class="brand-word">whoismy<b>crush</b></span>
+    </a>
+
+    <nav class="nav-links" id="nav-links" aria-label="Main">
+      <a class="nav-link{% if nav_home %} is-active{% endif %}" href="{% url 'core:how_it_works' %}">How it works</a>
+      {% if user.is_authenticated %}
+        <a class="nav-link{% if nav_secret %} is-active{% endif %}" href="{% url 'campus:secret' %}">My secret</a>
+        <a class="nav-link{% if nav_matches %} is-active{% endif %}" href="{% url 'campus:matches' %}">Matches</a>
+        <a class="nav-link{% if nav_account %} is-active{% endif %}" href="{% url 'campus:campus_id' %}">Profile</a>
+      {% endif %}
+    </nav>
+
+    <div class="nav-actions">
+      {% if user.is_authenticated %}
+        <a class="icon-btn" href="{% url 'campus:notifications' %}" aria-label="Notifications{% if unread_notifications %}, {{ unread_notifications }} unread{% endif %}">
+          {% include "components/icon.html" with name="bell" size=18 %}
+          {% if unread_notifications %}<span class="badge-count">{{ unread_notifications }}</span>{% endif %}
+        </a>
+        <form method="post" action="{% url 'accounts:logout' %}">
+          {% csrf_token %}
+          <button class="icon-btn" type="submit" aria-label="Sign out">
+            {% include "components/icon.html" with name="arrow-left" size=18 %}
+          </button>
+        </form>
+        <a class="btn btn-sm nav-signin" href="{% url 'campus:secret' %}">My secret</a>
+      {% else %}
+        <a class="btn btn-sm nav-signin" href="{% url 'accounts:login' %}">Sign in</a>
+        <a class="btn btn-sm btn-primary nav-signin" href="{% url 'accounts:register' %}">Join</a>
+      {% endif %}
+
+      <button class="icon-btn nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="nav-links" aria-label="Menu">
+        {% include "components/icon.html" with name="menu" class="icon-menu" %}
+        {% include "components/icon.html" with name="close" class="icon-close" %}
+      </button>
+    </div>
+  </div>
+</header>

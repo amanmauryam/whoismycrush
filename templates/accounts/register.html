@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="stepper">
+    <span class="pip is-done">1</span> Campus
+    <span class="rule"></span>
+    <span class="pip is-done">2</span> Campus ID
+    <span class="rule"></span>
+    <span class="pip is-current">3</span> Secret
+  </div>
+
+  <div class="page-head">
+    <h1>Create your<br>secret profile</h1>
+    <p>Just enough information to find the right person. Nothing more.</p>
+  </div>
+
+  <div class="paper">
+    {% if form.non_field_errors %}
+      <ul class="errorlist form-errors">
+        {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for field in form %}
+        {% include "components/form_field.html" with field=field %}
+      {% endfor %}
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Continue to my campus</button>
+        <a class="btn" href="{% url 'accounts:login' %}">I already have an account</a>
+      </div>
+    </form>
+  </div>
+
+  <p class="small muted" style="margin-top:16px">
+    {% include "components/icon.html" with name="shield" size=15 %}
+    Your email is only used for sign-in and the private "it's mutual" alert. Never shown to anyone.
+  </p>
+</div>
+{% endblock %}

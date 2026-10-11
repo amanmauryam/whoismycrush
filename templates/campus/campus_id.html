@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span> <span>My campus ID</span>
+  </div>
+
+  <div class="page-head">
+    <h1>My campus ID</h1>
+    <p>This is the identity a hand-typed crush has to match before we ever
+      suggest a mutual crush.</p>
+  </div>
+
+  <div class="id-card">
+    <div class="id-card-body">
+      <span class="stamp stamp-ink" style="margin-bottom:12px">{% if student.is_verified %}VERIFIED{% else %}UNVERIFIED{% endif %}</span>
+      <h2>{{ student.full_name }}</h2>
+      <p class="muted" style="margin:0 0 14px">{{ student.college.name }}</p>
+
+      <dl class="id-meta">
+        <div>
+          <dt>Course</dt>
+          <dd>{{ student.get_course_display }}</dd>
+        </div>
+        <div>
+          <dt>Year</dt>
+          <dd>{{ student.get_year_display }}</dd>
+        </div>
+        {% if student.section %}
+          <div>
+            <dt>Section</dt>
+            <dd>{{ student.section }}</dd>
+          </div>
+        {% endif %}
+        <div>
+          <dt>Roll no.</dt>
+          <dd>{{ student.masked_roll_number }}</dd>
+        </div>
+      </dl>
+    </div>
+    <div class="id-card-foot">
+      <span class="tiny-label">Secret desk</span>
+      <span class="sticker sticker-pink">{{ entry_count }} of 3 added</span>
+    </div>
+  </div>
+
+  <section class="section" style="border-top:0;padding-top:34px">
+    <h2 class="tiny-label">Edit details</h2>
+    <div class="paper">
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% for field in form %}
+          {% include "components/form_field.html" with field=field %}
+        {% endfor %}
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Save changes</button>
+          <a class="btn" href="{% url 'campus:privacy' %}">Privacy controls</a>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+{% endblock %}

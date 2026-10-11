@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block body_class %}page-sealed{% endblock %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="seal-stage">
+    <div class="envelope" aria-hidden="true">
+      <span class="paper-slide"></span>
+      <span class="envelope-flap"></span>
+    </div>
+
+    <p class="sealed-words">Sealed.</p>
+    <p class="muted">
+      {{ count }} {% if count == 1 %}name is{% else %}names are{% endif %} locked away.
+      Nobody can see your list — not even us.
+    </p>
+
+    {% if pending_review %}
+      <span class="stamp">IN REVIEW</span>
+      <p class="lede">
+        Something may be mutual. A real person checks every match before anyone
+        is told, so we won't say more than that yet.
+      </p>
+    {% else %}
+      <p class="waiting waiting-doodle"><span class="doodle" aria-hidden="true">?</span></p>
+      <p class="muted">Now we wait.</p>
+    {% endif %}
+
+    <p class="small muted">
+      {% include "components/icon.html" with name="shield" size=15 %}
+      We never tell the people on your list. If it's ever mutual, a human
+      verifies it and only then do both of you hear about it.
+    </p>
+
+    <div class="btn-row" style="width:100%">
+      <a class="btn btn-lg btn-primary btn-block" href="{% url 'campus:dashboard' %}">Go to my dashboard</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16
+    container_name: whoismycrush-db
+    environment:
+      POSTGRES_DB: whoismycrush
+      POSTGRES_USER: whoismycrush
+      POSTGRES_PASSWORD: whoismycrush
+    ports:
+      - "5432:5432"
+    volumes:
+      - whoismycrush-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U whoismycrush"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  whoismycrush-pgdata:

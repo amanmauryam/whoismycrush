@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span> <span>My desk</span>
+  </div>
+
+  <p class="greeting">{{ greeting }}</p>
+  <p class="greeting-note">Your secret is safe here.</p>
+
+  {% if sealed %}
+    <section class="sealed-card">
+      <div class="sealed-lock" aria-hidden="true">{% include "components/icon.html" with name="lock" size=32 %}</div>
+      <span class="stamp stamp-ink">SEALED</span>
+      <h2 style="margin-top:14px">Your crush list<br>is hidden</h2>
+      <p>{{ status.sealed }} of 3 picked. Nobody can see who, or in which order.</p>
+
+      <p class="waiting waiting-doodle">
+        <span class="doodle" aria-hidden="true">? </span>Waiting<span class="waiting-dots"></span>
+      </p>
+
+      <div class="btn-row" style="justify-content:center">
+        <a class="btn" href="{% url 'campus:secret' %}">{% include "components/icon.html" with name="plus" size=16 %} Edit my list</a>
+        <a class="btn btn-primary" href="{% url 'campus:matches' %}">{% include "components/icon.html" with name="heart" size=16 %} See matches</a>
+      </div>
+    </section>
+  {% else %}
+    <section class="sealed-card is-empty">
+      <div class="sealed-lock" aria-hidden="true">{% include "components/icon.html" with name="id" size=30 %}</div>
+      <h2>Nothing sealed yet</h2>
+      <p>Pick up to 3 people from {{ student.college.name }} and we'll only tell you when it's mutual.</p>
+      <a class="btn btn-primary" href="{% url 'campus:secret' %}">{% include "components/icon.html" with name="lock" size=16 %} Pick my secret 3</a>
+    </section>
+  {% endif %}
+
+  {% if has_matches %}
+    <section class="section" style="border-top:0;padding-top:36px">
+      <div class="section-head">
+        <div>
+          <span class="section-label">Heads up</span>
+          <h2>New mutual</h2>
+        </div>
+      </div>
+      <div class="match-grid">
+        {% for match in matches %}
+          <a class="match-card" href="{{ match.get_absolute_url }}">
+            <span class="heart" aria-hidden="true">❤️</span>
+            {% if match.status == "revealed" %}
+              <span class="stamp stamp-green">IT'S YOU</span>
+            {% else %}
+              <span class="stamp">MUTUAL</span>
+            {% endif %}
+            <h3>Someone picked you back</h3>
+            <p>Their identity is still hidden. Reveal only if both of you say yes.</p>
+          </a>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  <section class="section" style="border-top:0;padding-top:36px">
+    <div class="section-head">
+      <div>
+        <span class="section-label">Campus status</span>
+        <h2>{{ student.college.name }}</h2>
+      </div>
+    </div>
+
+    <div class="campus-status">
+      <div>
+        <span class="figure">{{ status.students }}</span>
+        <span class="caption">students from your college have joined</span>
+      </div>
+      <div>
+        <span class="figure">{{ status.matches }}</span>
+        <span class="caption">mutual crushes found on campus</span>
+      </div>
+      <div>
+        <span class="figure">{{ status.your_matches }}</span>
+        <span class="caption">of them are yours</span>
+      </div>
+    </div>
+
+    <p class="small muted" style="margin-top:16px">
+      <span class="doodle" aria-hidden="true">✦</span>
+      Only totals, never names. That's the whole point.
+    </p>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,14 @@
+Hello,
+
+You are receiving this email because you requested a password reset for your
+WhoIsMyCrush account.
+
+Open the link below and choose a new password:
+
+{{ protocol }}://{{ domain }}{% url 'accounts:password_reset_confirm' uidb64=uid token=token %}
+
+If you did not request this, you can safely ignore this email — your password
+will not change, and your secret list stays exactly as it is.
+
+Your secret is safe,
+WhoIsMyCrush

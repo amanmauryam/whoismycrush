@@ -1,0 +1,19 @@
+{% include "components/form_field.html" with field=form.full_name %}
+
+<div class="field-row">
+  {% include "components/form_field.html" with field=form.roll_number %}
+  {% include "components/form_field.html" with field=form.course %}
+</div>
+
+<div class="field-row">
+  {% include "components/form_field.html" with field=form.year %}
+  {% include "components/form_field.html" with field=form.section %}
+</div>
+
+{% include "components/form_field.html" with field=form.college %}
+
+<details class="field-extra">
+  <summary>Add more detail (optional)</summary>
+  {% include "components/form_field.html" with field=form.department %}
+  {% include "components/form_field.html" with field=form.nickname %}
+</details>

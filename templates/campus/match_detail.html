@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block body_class %}page-match{% endblock %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:matches' %}">Matches</a> <span>→</span> <span>Mutual</span>
+  </div>
+
+  {% if revealed %}
+    {# ---- Both sides said yes. Pause, then reveal (design.md 27/42). ---- #}
+    <section class="mutual-screen" data-reveal data-countdown="1600">
+      <span class="mutual-heart" aria-hidden="true">❤️</span>
+      <p class="anticipation" data-reveal-first>
+        {% include "components/icon.html" with name="heart" size=26 %} Wait.
+      </p>
+      <p class="anticipation" data-reveal-second hidden>
+        {% include "components/icon.html" with name="heart" size=26 %} It's mutual.
+      </p>
+    </section>
+
+    <section data-reveal-final hidden>
+      <div class="mutual-screen">
+        <span class="mutual-heart" aria-hidden="true">❤️</span>
+        <p class="anticipation">It's you.</p>
+
+        <div class="reveal-pair">
+          <div class="reveal-who is-you">
+            <span class="role">You</span>
+            <span class="who">{{ student.full_name }}</span>
+            <span class="tiny-label">{{ student.masked_roll_number }}</span>
+          </div>
+          <span class="reveal-arrow" aria-hidden="true">↔</span>
+          <div class="reveal-who">
+            <span class="role">Your mutual crush</span>
+            <span class="who">{{ other.full_name }}</span>
+            <span class="tiny-label">{{ other.masked_roll_number }}</span>
+          </div>
+        </div>
+
+        <span class="stamp stamp-green">REVEALED</span>
+        <p class="lede" style="margin-top:16px">You both secretly chose each other.</p>
+      </div>
+
+      <div class="btn-row">
+        <a class="btn btn-primary btn-block" href="{% url 'campus:matches' %}">Back to matches</a>
+        <a class="btn btn-block" href="{% url 'campus:campus_id' %}">My campus ID</a>
+      </div>
+    </section>
+
+  {% else %}
+    {# ---- Mutual, still anonymous (design.md 25/26) ---- #}
+    <section class="mutual-screen">
+      <span class="mutual-heart" aria-hidden="true">❤️</span>
+      <span class="stamp" style="margin-top:18px">MUTUAL</span>
+      <h1 style="margin-top:14px">Mutual crush</h1>
+      <p class="lede">You both chose each other.</p>
+      <p class="muted">
+        Your secret stayed safe the whole way here.
+        Their identity is still hidden — and so is yours.
+      </p>
+    </section>
+
+    {% if i_consented %}
+      <div class="paper">
+        <span class="stamp stamp-ink">REVEAL PENDING</span>
+        <h2 style="margin-top:14px">Waiting on them</h2>
+        <p class="muted">
+          You chose to reveal. Nothing happens until they choose to reveal too.
+          You can still wipe your selections and walk away at any time.
+        </p>
+        <form method="post" action="{% url 'campus:reveal' match.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="choice" value="anonymous">
+          <button class="btn btn-danger btn-block" type="submit">Take it back, stay anonymous</button>
+        </form>
+      </div>
+    {% else %}
+      <div class="paper">
+        <span class="stamp stamp-ink">REVEAL REQUEST</span>
+        <h2 style="margin-top:14px">Want to know who?</h2>
+        <p class="muted">
+          You can reveal your identity to your mutual crush. It only happens if
+          both of you say yes. Otherwise you both stay anonymous forever.
+        </p>
+
+        <form method="post" action="{% url 'campus:reveal' match.pk %}">
+          {% csrf_token %}
+          <div class="choice-list">
+            <label class="radio-field">
+              <input type="radio" name="choice" value="reveal" required>
+              <span>
+                <strong>Reveal</strong><br>
+                <span class="small muted">Show my name to my mutual crush.</span>
+              </span>
+            </label>
+            <label class="radio-field">
+              <input type="radio" name="choice" value="anonymous">
+              <span>
+                <strong>Keep anonymous</strong><br>
+                <span class="small muted">Nothing changes. The secret stays safe.</span>
+              </span>
+            </label>
+          </div>
+          <button class="btn btn-primary btn-block" type="submit">Send my answer</button>
+        </form>
+      </div>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

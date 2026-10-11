@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="stepper">
+    <span class="pip is-current">1</span> Campus
+    <span class="rule"></span>
+    <span class="pip">2</span> Campus ID
+    <span class="rule"></span>
+    <span class="pip">3</span> Secret
+  </div>
+
+  <div class="page-head">
+    <h1>Which campus<br>are you from?</h1>
+    <p>Your crush list only ever matches inside your own campus. That's what makes a match mean something.</p>
+  </div>
+
+  {% if selected %}
+    <div class="campus-chosen">
+      <strong>{% include "components/icon.html" with name="check" size=15 %} Campus locked</strong>
+      <p>You picked a campus. Nothing here is public.</p>
+    </div>
+  {% endif %}
+
+  {% if choice_form and choice_form.errors %}
+    <ul class="errorlist form-errors">
+      {% for error in choice_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+
+  <form method="get" class="picker-search" role="search">
+    <label class="field-label" for="{{ search_form.q.id_for_label }}">Search</label>
+    {{ search_form.q }}
+  </form>
+
+  {% if colleges %}
+    <form method="post">
+      {% csrf_token %}
+      <ul class="campus-list">
+        {% for college in colleges %}
+          <li>
+            <label class="campus-row" for="campus-{{ college.pk }}">
+              <input type="radio" name="college" value="{{ college.pk }}" id="campus-{{ college.pk }}"{% if selected == college.pk %} checked{% endif %} required>
+              <span>
+                <span class="name">{{ college.name }}</span>
+                {% if college.city or college.state %}
+                  <span class="place">{{ college.display_name }}</span>
+                {% endif %}
+              </span>
+            </label>
+          </li>
+        {% endfor %}
+      </ul>
+      <div class="btn-row">
+        <button class="btn btn-primary" type="submit">Continue</button>
+        {% if query %}
+          <a class="btn" href="{% url 'campus:campus_select' %}">Clear search</a>
+        {% endif %}
+      </div>
+    </form>
+  {% else %}
+    <div class="empty-state">
+      <span class="doodle" aria-hidden="true">?</span>
+      <h2>Hmm...</h2>
+      <p class="muted">We couldn't find that campus yet. Add it below and it'll be there for everyone next time.</p>
+    </div>
+  {% endif %}
+
+  <details class="add-college" id="add-college"{% if not colleges or add_open %} open{% endif %}>
+    <summary>Can't find your college? Add it</summary>
+    <p class="muted add-college-hint">
+      Type the full name. Once you add it, it shows up in the search for every
+      other candidate from your campus.
+    </p>
+    <form method="post" action="{% url 'campus:add_college' %}">
+      {% csrf_token %}
+      {% include "components/form_field.html" with field=college_form.name %}
+      <div class="field-row">
+        {% include "components/form_field.html" with field=college_form.city %}
+        {% include "components/form_field.html" with field=college_form.state %}
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Add my college</button>
+      </div>
+    </form>
+  </details>
+</div>
+{% endblock %}

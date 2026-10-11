@@ -1,0 +1,39 @@
+{% comment %}Mobile tab bar (design.md 31). Hidden from 760px up.{% endcomment %}
+<nav class="bottom-nav" aria-label="Quick navigation">
+  <a class="bottom-item{% if nav_home %} is-active{% endif %}" href="{% url 'campus:landing' %}">
+    {% include "components/icon.html" with name="home" size=20 %}
+    <span>Home</span>
+  </a>
+
+  {% if user.is_authenticated and has_campus_id %}
+    <a class="bottom-item{% if nav_secret %} is-active{% endif %}" href="{% url 'campus:secret' %}">
+      {% include "components/icon.html" with name="lock" size=20 %}
+      <span>Secret</span>
+    </a>
+    <a class="bottom-item{% if nav_matches %} is-active{% endif %}" href="{% url 'campus:matches' %}">
+      {% include "components/icon.html" with name="heart" size=20 %}
+      <span>Matches</span>
+    </a>
+    <a class="bottom-item{% if nav_account %} is-active{% endif %}" href="{% url 'campus:campus_id' %}">
+      {% include "components/icon.html" with name="user" size=20 %}
+      <span>Me</span>
+    </a>
+  {% else %}
+    <a class="bottom-item" href="{% url 'core:how_it_works' %}">
+      {% include "components/icon.html" with name="sparkle" size=20 %}
+      <span>How</span>
+    </a>
+    <a class="bottom-item bottom-item-ask" href="{% url 'accounts:register' %}">
+      {% include "components/icon.html" with name="lock" size=20 %}
+      <span>Join</span>
+    </a>
+    <a class="bottom-item" href="{% url 'campus:campus_select' %}">
+      {% include "components/icon.html" with name="id" size=20 %}
+      <span>Campus</span>
+    </a>
+    <a class="bottom-item" href="{% url 'accounts:login' %}">
+      {% include "components/icon.html" with name="user" size=20 %}
+      <span>Sign in</span>
+    </a>
+  {% endif %}
+</nav>

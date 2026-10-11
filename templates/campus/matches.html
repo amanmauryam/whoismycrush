@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span> <span>Matches</span>
+  </div>
+
+  <div class="page-head">
+    <h1>Matches</h1>
+    <p>Only ever shown when the feeling was mutual.</p>
+  </div>
+
+  {% if has_matches %}
+    <div class="match-grid">
+      {% for row in rows %}
+        <a class="match-card" href="{{ row.match.get_absolute_url }}">
+          <span class="heart" aria-hidden="true">❤️</span>
+          {% if row.match.status == "revealed" %}
+            <span class="stamp stamp-green">IT'S YOU</span>
+          {% elif row.match.status == "reveal_pending" %}
+            <span class="stamp">AWAITING THEM</span>
+          {% else %}
+            <span class="stamp">MUTUAL</span>
+          {% endif %}
+          <h3>
+            {% if row.match.status == "revealed" %}
+              {{ row.other.full_name }}
+            {% else %}
+              A mutual crush
+            {% endif %}
+          </h3>
+          <p>
+            {% if row.match.status == "revealed" %}
+              You both chose to reveal.
+            {% elif row.match.status == "reveal_pending" %}
+              You said yes. Waiting on them.
+            {% else %}
+              Their identity is still hidden.
+            {% endif %}
+          </p>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <span class="doodle" aria-hidden="true">???</span>
+      <h2>Still waiting<span class="waiting-dots"></span></h2>
+      <p class="muted">
+        Maybe they're here.<br>
+        Maybe they're thinking about you.<br>
+        Maybe they haven't joined yet.
+      </p>
+      <div class="btn-row">
+        <a class="btn btn-primary" href="{% url 'campus:secret' %}">Review my sealed list</a>
+        <a class="btn" href="{% url 'campus:invite' %}">Invite your college</a>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

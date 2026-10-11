@@ -1,0 +1,48 @@
+{% load humanize %}
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="{% url 'campus:landing' %}">
+          <span class="brand-mark" aria-hidden="true">?</span>
+          <span class="brand-word">whoismy<b>crush</b></span>
+        </a>
+        <p>
+          Pick up to 3 people from your college.<br>
+          Nobody will know. Unless they picked you too.
+        </p>
+      </div>
+
+      <div class="footer-col">
+        <h2>The game</h2>
+        <ul>
+          <li><a href="{% url 'core:how_it_works' %}">How it works</a></li>
+          {% if user.is_authenticated %}
+            <li><a href="{% url 'campus:secret' %}">My secret</a></li>
+            <li><a href="{% url 'campus:matches' %}">Matches</a></li>
+            <li><a href="{% url 'campus:invite' %}">Invite my campus</a></li>
+          {% else %}
+            <li><a href="{% url 'campus:campus_select' %}">Choose your campus</a></li>
+            <li><a href="{% url 'accounts:register' %}">Join the game</a></li>
+            <li><a href="{% url 'accounts:login' %}">Sign in</a></li>
+          {% endif %}
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h2>The rules</h2>
+        <ul>
+          <li><a href="{% url 'campus:privacy' %}">Privacy centre</a></li>
+          <li><a href="{% url 'core:privacy_policy' %}">Privacy policy</a></li>
+          <li><a href="{% url 'core:terms' %}">Terms of service</a></li>
+          <li><a href="{% url 'core:about' %}">About</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <span>&copy; {% now "Y" %} {{ SITE_NAME }}</span>
+      <span>Made for college notice boards, not dating apps.</span>
+    </div>
+  </div>
+</footer>

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Nothing here{% endblock %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="error-page">
+    <span class="doodle" aria-hidden="true">?</span>
+    <p class="error-code">???</p>
+    <h1>This page went quiet</h1>
+    <p class="muted">Whatever was here has been sealed away. Or the link is wrong.</p>
+    <div class="error-actions">
+      <a class="btn btn-primary" href="{% url 'campus:landing' %}">Back to the board</a>
+      <a class="btn" href="{% url 'core:how_it_works' %}">How it works</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

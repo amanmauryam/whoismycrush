@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+
+Disallow: /desk/
+Disallow: /secret/
+Disallow: /matches/
+Disallow: /campus-id/
+Disallow: /notifications/
+Disallow: /privacy/
+Disallow: /staff/
+Disallow: /account/
+Disallow: /login/
+Disallow: /register/
+Disallow: /admin/
+
+Sitemap: {{ SITE_URL }}/sitemap.xml

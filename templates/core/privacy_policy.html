@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow prose">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span> <span>Privacy</span>
+  </div>
+
+  <h1>Privacy</h1>
+  <p class="lede">Your secrets belong to you. Here is exactly what that means.</p>
+
+  <h2>What stays private, always</h2>
+  <ul>
+    <li><strong>Your crush list.</strong> Nobody can see who you added.</li>
+    <li><strong>Your priorities.</strong> The order of your three entries is never shown to a student, ever.</li>
+    <li><strong>Who else you added.</strong> There is no public list, feed, or leaderboard.</li>
+    <li><strong>The fact that you added someone at all.</strong> No badge, no counter, and we never notify them.</li>
+    <li><strong>Your full roll number.</strong> It is used for identity matching inside your campus only. Other students see at most the last three digits.</li>
+  </ul>
+
+  <h2>What we collect</h2>
+  <ul>
+    <li>Your email, for sign-in and the private "it's mutual" alert.</li>
+    <li>Your campus identity: full name, roll number, course, year, section, department, gender, date of birth.</li>
+    <li>The crush details you type by hand, stored against internal ids and never exposed.</li>
+  </ul>
+
+  <h2>What we never do</h2>
+  <ul>
+    <li>Tell anyone that they were entered as a crush.</li>
+    <li>Announce a match before a human verifies it.</li>
+    <li>Show who entered first, or in which position.</li>
+    <li>Reveal identity without both sides agreeing.</li>
+    <li>Offer a student search or let anyone browse your campus.</li>
+    <li>Sell or share your data.</li>
+  </ul>
+
+  <h2>Your choices</h2>
+  <ul>
+    <li>Delete all crush entries at any time.</li>
+    <li>Delete your account and campus ID entirely.</li>
+  </ul>
+
+  <div class="prose-cta">
+    <a class="btn btn-primary" href="{% url 'campus:privacy' %}">Open my privacy centre</a>
+    <a class="btn" href="{% url 'core:terms' %}">Terms of service</a>
+  </div>
+</div>
+{% endblock %}

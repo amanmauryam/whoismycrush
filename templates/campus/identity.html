@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="stepper">
+    <span class="pip is-done">1</span> Campus
+    <span class="rule"></span>
+    <span class="pip is-current">2</span> Campus ID
+    <span class="rule"></span>
+    <span class="pip">3</span> Secret
+  </div>
+
+  <div class="page-head">
+    <h1>Your campus ID</h1>
+    <p>Just enough information to find the right person. <strong>{{ college.name }}</strong></p>
+  </div>
+
+  <div class="paper">
+    {% if form.non_field_errors %}
+      <ul class="errorlist form-errors">
+        {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      {% include "components/form_field.html" with field=form.full_name %}
+      {% include "components/form_field.html" with field=form.roll_number %}
+
+      <div class="field-row">
+        {% include "components/form_field.html" with field=form.course %}
+        {% include "components/form_field.html" with field=form.year %}
+      </div>
+
+      <div class="field-row">
+        {% include "components/form_field.html" with field=form.section %}
+        {% include "components/form_field.html" with field=form.gender %}
+      </div>
+
+      {% include "components/form_field.html" with field=form.date_of_birth %}
+      {% include "components/form_field.html" with field=form.nickname %}
+      {% include "components/form_field.html" with field=form.age_confirmation %}
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Lock my campus ID</button>
+        <a class="btn" href="{% url 'campus:campus_select' %}">Change campus</a>
+      </div>
+    </form>
+  </div>
+
+  <p class="small muted" style="margin-top:16px">
+    {% include "components/icon.html" with name="shield" size=15 %}
+    Your roll number is used to match identity inside {{ college.name }} only. Nobody ever sees the full number.
+  </p>
+</div>
+{% endblock %}

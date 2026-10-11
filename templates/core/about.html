@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow prose">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span> <span>About</span>
+  </div>
+
+  <h1>About</h1>
+  <p class="lede">WhoIsMyCrush is a secret college game, not a dating app.</p>
+
+  <h2>The idea</h2>
+  <p>
+    Everyone has someone they've been quietly thinking about. Most of the time nothing
+    ever happens — not because they don't feel it, but because nobody finds out.
+    WhoIsMyCrush is one sealed envelope per student. You put up to three names in it,
+    and you find out only if one of those people did the same with you.
+  </p>
+
+  <h2>Why anonymity</h2>
+  <p>
+    If picking someone were visible, the game would just be humiliation with extra steps.
+    So nothing about your list is ever shown to anyone: not who you picked, not the
+    order, not who else. Priority is stored purely for internal matching analytics and
+    is never rendered, emailed, or returned by any API.
+  </p>
+
+  <h2>Who it's for</h2>
+  <p>
+    College students aged 18 and over. One campus identity each, verified against a
+    roll number inside that campus, so a match means two real people at the same
+    college — not a stranger on the internet.
+  </p>
+
+  <h2>What it is not</h2>
+  <p>
+    There is no public feed, no followers, no likes, no comments, no chat, no stories,
+    no swipe cards, no recommendations engine. The simplicity is the product.
+  </p>
+
+  <div class="prose-cta">
+    <a class="btn btn-primary" href="{% if user.is_authenticated and has_campus_id %}{% url 'campus:secret' %}{% else %}{% url 'accounts:register' %}{% endif %}">Enter your campus</a>
+    <a class="btn" href="{% url 'core:how_it_works' %}">How it works</a>
+  </div>
+</div>
+{% endblock %}

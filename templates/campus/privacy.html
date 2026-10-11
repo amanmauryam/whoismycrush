@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:campus_id' %}">My campus ID</a> <span>→</span> <span>Privacy</span>
+  </div>
+
+  <div class="page-head">
+    <h1>Your secrets<br>belong to you.</h1>
+    <p>Nothing on this page is a toggle you have to think about. These are the rules.</p>
+  </div>
+
+  <ul class="privacy-list">
+    <li>{% include "components/icon.html" with name="check" size=16 %} Nobody can see your crush list.</li>
+    <li>{% include "components/icon.html" with name="check" size=16 %} Nobody can see your priorities. Never.</li>
+    <li>{% include "components/icon.html" with name="check" size=16 %} There is no student search, so nobody can browse you either.</li>
+    <li>{% include "components/icon.html" with name="check" size=16 %} The person you enter is <strong>never</strong> told you entered them.</li>
+    <li>{% include "components/icon.html" with name="check" size=16 %} A match is only ever announced after both sides match <em>and</em> a human approves it.</li>
+    <li>{% include "components/icon.html" with name="check" size=16 %} Your full roll number is never displayed publicly.</li>
+  </ul>
+
+  <div class="paper">
+    <h2>Who can find me?</h2>
+    <p class="muted" style="margin-bottom:0">
+      Nobody, by design. We removed student search entirely. The only way someone
+      can name you is if they already know your name and roll number in real life —
+      and even then, nothing is confirmed until an admin verifies it.
+    </p>
+  </div>
+
+  <div class="paper" style="margin-top:20px">
+    <h2>What you have saved</h2>
+    <ul class="privacy-list" style="margin-bottom:0">
+      <li>{% include "components/icon.html" with name="lock" size=16 %} {{ entry_count }} active crush {% if entry_count == 1 %}entry{% else %}entries{% endif %}</li>
+      <li>{% include "components/icon.html" with name="heart" size=16 %} {{ match_count }} mutual {% if match_count == 1 %}crush{% else %}crushes{% endif %}</li>
+    </ul>
+  </div>
+
+  <div class="paper danger-zone" style="margin-top:20px">
+    <h2>Danger zone</h2>
+    <p class="muted">
+      Deleting is instant and permanent. Deleting your crush list closes any
+      mutual matches that depend on it.
+    </p>
+
+    <div class="danger-actions">
+      <form method="post" action="{% url 'campus:delete_crushes' %}">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"
+                data-confirm="Delete all your crush entries? This cannot be undone.">
+          {% include "components/icon.html" with name="trash" size=16 %} Delete all crush entries
+        </button>
+      </form>
+
+      <form method="post" action="{% url 'campus:delete_account' %}">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit"
+                data-confirm="Delete your account and campus ID forever?">
+          {% include "components/icon.html" with name="trash" size=16 %} Delete my account
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

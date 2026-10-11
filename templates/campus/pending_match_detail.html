@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:pending_matches' %}">Pending matches</a> <span>→</span>
+    <span>Review #{{ proposal.pk }}</span>
+  </div>
+
+  <div class="page-head">
+    <h1>Is this one real?</h1>
+    <p>
+      Compare what each student typed against the other's registered campus ID.
+      Only approve when the identities line up.
+    </p>
+  </div>
+
+  <div class="compare-grid">
+    <article class="paper compare-card">
+      <span class="stamp stamp-ink">PERSON A</span>
+      <h2>{{ proposal.author.full_name }}</h2>
+      <p class="muted">{{ proposal.author.college.name }}</p>
+      <dl class="id-meta">
+        <div><dt>Roll no.</dt><dd>{{ proposal.author.masked_roll_number }}</dd></div>
+        <div><dt>Course</dt><dd>{{ proposal.author.get_course_display }}</dd></div>
+        <div><dt>Year</dt><dd>{{ proposal.author.get_year_display }}</dd></div>
+        {% if proposal.author.section %}<div><dt>Section</dt><dd>{{ proposal.author.section }}</dd></div>{% endif %}
+        {% if proposal.author.department %}<div><dt>Dept.</dt><dd>{{ proposal.author.department }}</dd></div>{% endif %}
+      </dl>
+      <h3 class="tiny-label">Person A entered this person</h3>
+      <p>
+        <strong>{{ proposal.crush_entry.full_name }}</strong><br>
+        {{ proposal.crush_entry.course_line }}<br>
+        <span class="muted">Roll ··· {{ proposal.crush_entry.masked_roll_number }}</span>
+        {% if proposal.crush_entry.nickname %}<br><span class="muted">Nickname: {{ proposal.crush_entry.nickname }}</span>{% endif %}
+      </p>
+      <p class="small muted">Internal priority: #{{ proposal.crush_entry.priority }} (never shown to students)</p>
+    </article>
+
+    <article class="paper compare-card">
+      <span class="stamp stamp-ink">PERSON B</span>
+      <h2>{{ proposal.registered_student.full_name }}</h2>
+      <p class="muted">{{ proposal.registered_student.college.name }}</p>
+      <dl class="id-meta">
+        <div><dt>Roll no.</dt><dd>{{ proposal.registered_student.masked_roll_number }}</dd></div>
+        <div><dt>Course</dt><dd>{{ proposal.registered_student.get_course_display }}</dd></div>
+        <div><dt>Year</dt><dd>{{ proposal.registered_student.get_year_display }}</dd></div>
+        {% if proposal.registered_student.section %}<div><dt>Section</dt><dd>{{ proposal.registered_student.section }}</dd></div>{% endif %}
+        {% if proposal.registered_student.department %}<div><dt>Dept.</dt><dd>{{ proposal.registered_student.department }}</dd></div>{% endif %}
+      </dl>
+      {% if partner %}
+        <h3 class="tiny-label">Person B entered this person</h3>
+        <p>
+          <strong>{{ partner.crush_entry.full_name }}</strong><br>
+          {{ partner.crush_entry.course_line }}<br>
+          <span class="muted">Roll ··· {{ partner.crush_entry.masked_roll_number }}</span>
+          {% if partner.crush_entry.nickname %}<br><span class="muted">Nickname: {{ partner.crush_entry.nickname }}</span>{% endif %}
+        </p>
+        <p class="small muted">Internal priority: #{{ partner.crush_entry.priority }} (never shown to students)</p>
+      {% else %}
+        <p class="muted">No reciprocal entry — this proposal cannot be approved.</p>
+      {% endif %}
+    </article>
+  </div>
+
+  <div class="paper">
+    <h2>Matcher notes</h2>
+    <p>
+      <strong>Confidence:</strong>
+      {% if proposal.confidence_score %}{{ proposal.confidence_percent }}{% else %}—{% endif %}
+    </p>
+    <p class="muted">{{ proposal.match_reasons|default:"No reasons recorded." }}</p>
+  </div>
+
+  {% if partner %}
+    <div class="paper" style="margin-top:20px">
+      <h2>Decision</h2>
+      <p class="muted">
+        Approving creates a mutual crush and notifies both students. Rejecting
+        closes the pair and notifies nobody.
+      </p>
+      <form method="post" action="{% url 'campus:approve_match' proposal.pk %}">
+        {% csrf_token %}
+        {% include "components/form_field.html" with field=notes_form.admin_notes %}
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Approve match</button>
+        </div>
+      </form>
+      <form method="post" action="{% url 'campus:reject_match' proposal.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="admin_notes" value="Rejected from review desk.">
+        <div class="form-actions">
+          <button class="btn btn-danger" type="submit"
+                  data-confirm="Reject this pair? Neither student is contacted.">
+            Reject match
+          </button>
+        </div>
+      </form>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

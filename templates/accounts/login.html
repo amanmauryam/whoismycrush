@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="page-head">
+    <h1>Sign in</h1>
+    <p>Your secret desk is waiting.</p>
+  </div>
+
+  <div class="paper">
+    {% if form.non_field_errors %}
+      <ul class="errorlist form-errors">
+        {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+
+      {% include "components/form_field.html" with field=form.username %}
+      {% include "components/form_field.html" with field=form.password %}
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Sign in</button>
+        <a class="btn" href="{% url 'accounts:forgot_password' %}">Forgot password?</a>
+      </div>
+    </form>
+  </div>
+
+  <p class="small muted" style="margin-top:18px">
+    New here? <a href="{% url 'accounts:register' %}">Create your secret profile</a>.
+  </p>
+</div>
+{% endblock %}

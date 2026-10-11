@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:secret' %}">My secret</a> <span>→</span> <span>Invite</span>
+  </div>
+
+  <div class="page-head">
+    <h1>Invite your college</h1>
+    <p>
+      {% if college %}
+        Your crush list only matches inside {{ college.name }}. If someone you like isn't there yet, get them on board.
+      {% else %}
+        Crushes never cross a campus boundary — so a bigger campus means better odds.
+      {% endif %}
+    </p>
+  </div>
+
+  <div class="paper">
+    <ul class="privacy-list">
+      <li>{% include "components/icon.html" with name="check" size=16 %} Send your campus link to friends.</li>
+      <li>{% include "components/icon.html" with name="check" size=16 %} We'll let you know the moment it opens.</li>
+      <li>{% include "components/icon.html" with name="check" size=16 %} Your email is never shared with anyone.</li>
+    </ul>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for field in form %}
+        {% include "components/form_field.html" with field=field %}
+      {% endfor %}
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">{% include "components/icon.html" with name="plus" size=16 %} Invite my campus</button>
+        <a class="btn" href="{% url 'campus:secret' %}">Back to my secret</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

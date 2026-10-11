@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container narrow">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span> <span>Notifications</span>
+  </div>
+
+  <div class="section-head">
+    <div>
+      <h1>Notifications</h1>
+      {% if unread %}<p class="muted">{{ unread }} unread</p>{% endif %}
+    </div>
+    {% if unread %}
+      <form method="post" action="{% url 'campus:mark_all_read' %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{% url 'campus:notifications' %}">
+        <button class="btn btn-sm" type="submit">Mark all read</button>
+      </form>
+    {% endif %}
+  </div>
+
+  {% if notifications %}
+    <ul class="notification-list">
+      {% for note in notifications %}
+        <li class="notification-item{% if not note.is_read %} is-unread{% endif %}">
+          <div>
+            <p class="notification-body">{{ note.message }}</p>
+            <span class="notification-time">{{ note.created_at|timesince }} ago</span>
+          </div>
+          {% if note.url %}
+            <form method="post" action="{% url 'campus:mark_read' note.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ note.url }}">
+              <button class="btn btn-sm" type="submit">Open</button>
+            </form>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="empty-state">
+      <span class="doodle" aria-hidden="true">✦</span>
+      <h2>All quiet</h2>
+      <p class="muted">
+        Notifications only say <strong>"someone picked you back"</strong>.<br>
+        Never a name. Never a hint.
+      </p>
+      <a class="btn" href="{% url 'campus:secret' %}">Check my secret desk</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
