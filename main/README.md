@@ -54,11 +54,25 @@ guide. Notable switches:
 | Var | Default | Meaning |
 | --- | --- | --- |
 | `EMAIL_VERIFICATION_REQUIRED` | `False` | Hard-gate onboarding on email confirmation |
+| `EMAIL_HOST` / `EMAIL_PORT` | `localhost` / `25` | SMTP server. Must be set or no mail is ever delivered |
+| `EMAIL_USE_TLS` / `EMAIL_USE_SSL` | `False` | Transport security for the SMTP connection |
+| `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` | empty | SMTP credentials. For Gmail use an **app password**, not the account password |
 | `RATELIMIT_ENABLE` | `True` | Fixed-window throttling for sensitive actions |
 | `CACHE_BACKEND` | `locmem` | `redis` / `memcached` for shared counters in production |
 | `ANALYTICS_ENABLED` + `ANALYTICS_DOMAIN` | off | Cookie-less Plausible analytics |
 | `CONTACT_EMAIL` | from email | Inbox for the public contact form |
 | `MATCH_EMAILS_ENABLED` | `True` | Whether the "it's mutual" alert is emailed |
+
+Check the mail setup any time with:
+
+```
+python manage.py check_email                  # connect and authenticate only
+python manage.py check_email --to you@x.com  # also send a real test message
+```
+
+Delivery failures are logged under the `config.mail` logger and reported to the
+caller, so a broken mail server shows up in the terminal instead of silently
+swallowing every confirmation link.
 
 ## Documentation
 

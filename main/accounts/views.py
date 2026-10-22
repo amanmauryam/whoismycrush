@@ -50,12 +50,21 @@ def register(request):
             # bound to the account, not the session) is generated once the
             # account is fully settled. Delivery is best-effort and never blocks
             # onboarding (see accounts/middleware.py for hard enforcement).
-            send_verification_email(user, request)
-            messages.success(
-                request,
-                "Your secret profile is ready. We've emailed you a confirmation link. "
-                "Now: which campus are you from?",
-            )
+            result = send_verification_email(user, request)
+            if result:
+                messages.success(
+                    request,
+                    "Your secret profile is ready. We've emailed you a confirmation link. "
+                    "Now: which campus are you from?",
+                )
+            else:
+                # Never claim an email was sent when the server refused it.
+                messages.warning(
+                    request,
+                    "Your secret profile is ready, but we could not send your confirmation "
+                    "email. You can request a new link at any time. "
+                    "Now: which campus are you from?",
+                )
             return redirect("campus:campus_select")
     else:
         form = RegisterForm()
@@ -221,10 +230,16 @@ def verify_email_notice(request):
 @require_POST
 @ratelimit(key="user", rate="5/h")
 def resend_verification(request):
-    if email_is_verified(request.user):
+    result = send_verification_email(request.user, request)
+    if email_is_verified(request.user) or result.reason == "already_verified":
         messages.info(request, "Your email is already confirmed.")
-    elif send_verification_email(request.user, request):
+    elif result:
         messages.success(request, "Sent. Check your inbox for the confirmation link.")
-    else:
+    elif result.reason == "throttled":
         messages.info(request, "We just sent one. Please wait a minute before trying again.")
+    else:
+        messages.error(
+            request,
+            "We could not send that email just now. Please try again in a moment.",
+        )
     return redirect(request.POST.get("next") or reverse("accounts:verify_email_notice"))

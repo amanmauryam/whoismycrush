@@ -14,9 +14,10 @@ detail view and the Django admin action call that one function (requirements
 from __future__ import annotations
 
 from django.conf import settings
-from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q
+
+from config.mail import send_mail
 
 from .models import (
     MAX_CRUSHES,
@@ -272,14 +273,18 @@ def notify_reveal_pending(match: MutualMatch, student: StudentProfile) -> None:
     )
 
 
-def send_match_email(student: StudentProfile, match: MutualMatch | None = None) -> None:
-    """Never includes the counterpart's name, roll number, or priority."""
+def send_match_email(student: StudentProfile, match: MutualMatch | None = None) -> bool:
+    """Never includes the counterpart's name, roll number, or priority.
+
+    Returns ``True`` only if the mail was accepted by the server. The in-app
+    ``Notification`` is written regardless, so a mail outage never hides the
+    match from the student.
+    """
     site = getattr(settings, "SITE_URL", "")
-    if getattr(settings, "MATCH_EMAILS_ENABLED", True):
-        send_mail(
-            MATCH_SUBJECT,
-            MATCH_BODY.format(name=student.full_name.split(" ")[0], site=site),
-            settings.DEFAULT_FROM_EMAIL,
-            [student.user.email],
-            fail_silently=True,
-        )
+    if not getattr(settings, "MATCH_EMAILS_ENABLED", True):
+        return False
+    return send_mail(
+        MATCH_SUBJECT,
+        MATCH_BODY.format(name=student.full_name.split(" ")[0], site=site),
+        [student.user.email],
+    )

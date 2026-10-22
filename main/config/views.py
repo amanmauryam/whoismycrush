@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.contrib import messages
-from django.core.mail import send_mail
 from django.shortcuts import redirect, render
 from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
@@ -10,6 +9,7 @@ from django.views.generic import TemplateView
 from config import seo
 from config.content import FAQ_GROUPS, faq_pairs
 from config.forms import ContactForm
+from config.mail import send_mail
 from config.ratelimit import ratelimit
 
 HOME = ("Home", "/")
@@ -175,13 +175,12 @@ class ContactView(TemplateView):
             f"{data['message']}\n"
         )
         # Best-effort: a mail failure should not lose the user's submission or
-        # show them an error they cannot act on.
+        # show them an error they cannot act on. It is still logged, so a broken
+        # mail server does not silently swallow every contact form message.
         send_mail(
             f"[WhoIsMyCrush] {data['topic']}",
             body,
-            settings.DEFAULT_FROM_EMAIL,
             [to],
-            fail_silently=True,
         )
 
 

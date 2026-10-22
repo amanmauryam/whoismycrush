@@ -21,6 +21,11 @@ DB_BACKEND=postgres
 DB_NAME / DB_USER / DB_PASSWORD / DB_HOST / DB_PORT
 SITE_URL=https://whoismycrush.com
 EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=…
+EMAIL_HOST_PASSWORD=…            # an app password, not the account password
 DEFAULT_FROM_EMAIL=no-reply@whoismycrush.com
 CONTACT_EMAIL=contact@whoismycrush.com
 CACHE_BACKEND=redis
@@ -82,7 +87,11 @@ the verifier user with `campus.verify_potentialmatch` permission granted.
 - [ ] Proxy overwrites `X-Forwarded-For` and sends `X-Forwarded-Proto`.
 - [ ] `collectstatic` ran; WhiteNoise configured; fonts/icons are the only
       external requests.
-- [ ] Email is on a real SMTP/transactional provider (`EMAIL_BACKEND`).
+- [ ] Email is on a real SMTP/transactional provider (`EMAIL_BACKEND`), with
+      `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER` and `EMAIL_HOST_PASSWORD`
+      all set.
+- [ ] `python manage.py check_email --to <you>` passes — it proves the server
+      accepts the credentials and that a message really leaves the box.
 - [ ] Redis reachable, `CACHES` pointed at it, `RATELIMIT_ENABLE=True`.
 - [ ] `seed_posts` run so the blog isn't an empty directory index.
 - [ ] Backups for Postgres and `MEDIA_ROOT`.

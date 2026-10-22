@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.test import TestCase, override_settings
@@ -95,6 +97,62 @@ class VerificationFlowTests(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         user = User.objects.get(email="newbie@example.edu")
         self.assertFalse(email_is_verified(user))
+
+
+class SendFailureTests(TestCase):
+    """A failed send must be visible, and must not lock the student out."""
+
+    def _break_smtp(self):
+        return mock.patch(
+            "config.mail._django_send_mail", side_effect=OSError("connection refused")
+        )
+
+    def test_failed_send_is_reported_as_failed(self):
+        user = make_user()
+        with self._break_smtp():
+            with self.assertLogs("config.mail", level="ERROR"):
+                result = send_verification_email(user)
+        self.assertFalse(result)
+        self.assertEqual(result.reason, "failed")
+
+    def test_failed_send_does_not_start_the_cooldown(self):
+        user = make_user()
+        with self._break_smtp():
+            with self.assertLogs("config.mail", level="ERROR"):
+                send_verification_email(user)
+        user.email_verification.refresh_from_db()
+        self.assertIsNone(user.email_verification.sent_at)
+
+        # A retry must be allowed straight away rather than being throttled.
+        with self._break_smtp():
+            with self.assertLogs("config.mail", level="ERROR"):
+                again = send_verification_email(user)
+        self.assertEqual(again.reason, "failed")
+
+    def test_successful_send_reports_sent(self):
+        user = make_user()
+        result = send_verification_email(user)
+        self.assertTrue(result)
+        self.assertEqual(result.reason, "sent")
+        user.email_verification.refresh_from_db()
+        self.assertIsNotNone(user.email_verification.sent_at)
+
+    def test_register_does_not_claim_an_email_was_sent_when_it_failed(self):
+        with self._break_smtp():
+            with self.assertLogs("config.mail", level="ERROR"):
+                response = self.client.post(
+                    reverse("accounts:register"),
+                    {
+                        "email": "newbie@example.edu",
+                        "password1": "a-very-strong-pass-1",
+                        "password2": "a-very-strong-pass-1",
+                        "agree": "on",
+                    },
+                )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(mail.outbox), 0)
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertTrue(any("could not send" in m for m in messages), messages)
 
 
 @override_settings(EMAIL_VERIFICATION_REQUIRED=True)

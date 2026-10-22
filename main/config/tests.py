@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.core import mail
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from config.content import FAQ_GROUPS, faq_pairs
+from config.mail import send_mail
 from config.ratelimit import parse_rate, ratelimit
 from config.sanitize import sanitize_html
 
@@ -89,6 +92,40 @@ class StructuredDataTests(TestCase):
         self.assertIn("application/ld+json", html)
         self.assertIn('"@type":"Organization"', html)
         self.assertIn('"@type":"WebSite"', html)
+
+
+class MailHelperTests(TestCase):
+    """The helper must never let a delivery failure disappear."""
+
+    def test_success_reports_true(self):
+        self.assertTrue(send_mail("Subject", "Body", "someone@example.edu"))
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_single_address_and_list_both_work(self):
+        send_mail("Subject", "Body", "one@example.edu")
+        send_mail("Subject", "Body", ["two@example.edu", "three@example.edu"])
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual(len(mail.outbox[1].to), 2)
+
+    def test_smtp_failure_is_reported_and_logged(self):
+        with mock.patch(
+            "config.mail._django_send_mail", side_effect=OSError("connection refused")
+        ):
+            with self.assertLogs("config.mail", level="ERROR"):
+                delivered = send_mail("Subject", "Body", "someone@example.edu")
+        self.assertFalse(delivered)
+
+    def test_smtp_failure_does_not_raise(self):
+        with mock.patch(
+            "config.mail._django_send_mail", side_effect=OSError("connection refused")
+        ):
+            with self.assertLogs("config.mail", level="ERROR"):
+                send_mail("Subject", "Body", "someone@example.edu")
+
+    def test_no_recipients_is_refused(self):
+        with self.assertLogs("config.mail", level="WARNING"):
+            self.assertFalse(send_mail("Subject", "Body", []))
+        self.assertEqual(len(mail.outbox), 0)
 
 
 class ContactFormTests(TestCase):
