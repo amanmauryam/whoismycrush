@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import io
 import math
+import os
 import re
+from pathlib import Path
 
+from django.core.files.base import ContentFile
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 from django_ckeditor_5.fields import CKEditor5Field
+from PIL import Image, ImageOps
 
 from config.sanitize import sanitize_html
 
@@ -137,7 +142,76 @@ class Post(models.Model):
             self.slug = self._unique_slug()
         if self.is_published and self.published_at is None:
             self.published_at = timezone.now()
+        self._convert_cover_to_webp()
         super().save(*args, **kwargs)
+
+    def _convert_cover_to_webp(self):
+        if not self.featured_image:
+            return
+        try:
+            name = self.featured_image.name or ""
+        except Exception:
+            return
+        if str(name).lower().endswith(".webp"):
+            return
+        try:
+            file = self.featured_image.file
+        except Exception:
+            return
+        try:
+            file.seek(0)
+        except Exception:
+            pass
+        try:
+            with Image.open(file) as image:
+                image = ImageOps.exif_transpose(image)
+                if image.mode in ("RGBA", "LA", "P"):
+                    background = Image.new("RGB", image.size, (255, 255, 255))
+                    if image.mode == "P":
+                        image = image.convert("RGBA")
+                    if image.mode in ("RGBA", "LA"):
+                        background.paste(image, mask=image.split()[-1])
+                    else:
+                        background.paste(image)
+                    image = background
+                elif image.mode != "RGB":
+                    image = image.convert("RGB")
+                buffer = io.BytesIO()
+                image.save(buffer, format="WEBP", quality=85, method=6)
+                buffer.seek(0)
+        except Exception:
+            try:
+                file.seek(0)
+            except Exception:
+                pass
+            return
+        try:
+            file.seek(0)
+        except Exception:
+            pass
+        from django.core.files.storage import default_storage
+        from django.utils import timezone
+
+        now = timezone.now()
+        stem = Path(str(name)).stem or "cover"
+        filename = "%s.webp" % (slugify(stem) or "cover")
+        new_name = "blog/covers/%04d/%02d/%s" % (now.year, now.month, filename)
+        try:
+            old = self.featured_image.name
+            if old and old != new_name and default_storage.exists(old):
+                default_storage.delete(old)
+        except Exception:
+            pass
+        # Assign the saved file
+        self.featured_image = self.featured_image.field.attr_class(
+            self,
+            self.featured_image.field,
+            new_name,
+        )
+        self.featured_image.file = default_storage.open(new_name, "rb")
+        # Actually save content
+        saved_name = default_storage.save(new_name, ContentFile(buffer.getvalue()))
+        self.featured_image.name = saved_name
 
     def _unique_slug(self) -> str:
         base = slugify(self.title)[:200] or "post"

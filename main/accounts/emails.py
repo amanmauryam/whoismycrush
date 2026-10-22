@@ -92,10 +92,20 @@ def send_verification_email(user, request=None) -> SendResult:
         return SendResult(False, "throttled")
 
     url = verification_url(user)
+    recipient = (getattr(user, "email", "") or "").strip()
+    if not recipient:
+        username = (getattr(user, "username", "") or "").strip()
+        if "@" in username:
+            recipient = username
+    if not recipient:
+        # The cooldown exists to stop spamming, not to lock a student out after
+        # a failed send. Leaving sent_at untouched lets them retry right away.
+        return SendResult(False, "failed")
+
     delivered = send_mail(
         SUBJECT,
         BODY.format(name=(user.first_name or "there"), url=url),
-        [user.email],
+        [recipient],
     )
     if not delivered:
         # The cooldown exists to stop spamming, not to lock a student out after
