@@ -7,10 +7,60 @@ from django.db import models
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
+from django_ckeditor_5.fields import CKEditor5Field
 
 from config.sanitize import sanitize_html
 
+from .validators import validate_cover_image
+
 _WORDS = re.compile(r"\S+")
+
+
+class Category(models.Model):
+    """An editorial shelf for Pro Tips (privacy, tutorials, troubleshooting…)."""
+
+    ACCENTS = (
+        ("yellow", "Yellow"),
+        ("pink", "Pink"),
+        ("blue", "Blue"),
+        ("green", "Green"),
+        ("red", "Red"),
+    )
+
+    name = models.CharField(max_length=80, unique=True)
+    slug = models.SlugField(max_length=90, unique=True, blank=True)
+    description = models.TextField(
+        max_length=240,
+        blank=True,
+        help_text="One line shown above the category archive.",
+    )
+    accent = models.CharField(max_length=10, choices=ACCENTS, default="yellow")
+    order = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "name"]
+        verbose_name_plural = "categories"
+
+    def __str__(self) -> str:
+        return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = self._unique_slug()
+        super().save(*args, **kwargs)
+
+    def _unique_slug(self) -> str:
+        base = slugify(self.name)[:80] or "category"
+        candidate = base
+        suffix = 2
+        while Category.objects.filter(slug=candidate).exclude(pk=self.pk).exists():
+            candidate = f"{base}-{suffix}"
+            suffix += 1
+        return candidate
+
+    def get_absolute_url(self) -> str:
+        return reverse("blog:category", kwargs={"category": self.slug})
 
 
 class PublishedPostManager(models.Manager):
@@ -28,18 +78,36 @@ class PublishedPostManager(models.Manager):
 class Post(models.Model):
     title = models.CharField(max_length=200)
     slug = models.SlugField(max_length=220, unique=True, blank=True)
+    category = models.ForeignKey(
+        Category,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="posts",
+    )
     excerpt = models.TextField(
         max_length=320,
         help_text="One or two sentences shown on the index and in search results.",
     )
-    body = models.TextField(
-        help_text="A small safe subset of HTML is allowed; scripts are stripped.",
+    body = CKEditor5Field(
+        "body",
+        config_name="extends",
+        help_text="Rich text is sanitized before it is rendered on the public site.",
     )
     featured_image = models.ImageField(
-        upload_to="blog/", blank=True, null=True,
-        help_text="Optional; a sensible default image is used when omitted.",
+        "cover image",
+        upload_to="blog/covers/%Y/%m/",
+        blank=True,
+        null=True,
+        validators=[validate_cover_image],
+        help_text="Optional. JPG, PNG, WEBP or GIF, up to 5 MB.",
     )
     author_name = models.CharField(max_length=120, default="WhoIsMyCrush")
+    is_featured = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Featured tips appear at the top of Pro Tips.",
+    )
 
     is_published = models.BooleanField(default=False)
     published_at = models.DateTimeField(null=True, blank=True)
@@ -101,9 +169,16 @@ class Post(models.Model):
         return self.canonical_url or self.get_absolute_url()
 
     @property
+    def word_count(self) -> int:
+        return len(_WORDS.findall(re.sub(r"<[^>]+>", " ", self.body or "")))
+
+    @property
     def reading_minutes(self) -> int:
-        words = len(_WORDS.findall(re.sub(r"<[^>]+>", " ", self.body or "")))
-        return max(1, math.ceil(words / 220))
+        return max(1, math.ceil(self.word_count / 220))
+
+    @property
+    def accent(self) -> str:
+        return self.category.accent if self.category else "yellow"
 
     @property
     def image_url(self) -> str:

@@ -8,6 +8,7 @@ allow-list of tags/attributes and refuses unsafe URL schemes, so a stray
 
 from __future__ import annotations
 
+import re
 from html import escape
 from html.parser import HTMLParser
 
@@ -24,6 +25,9 @@ ALLOWED_TAGS = {
     "i",
     "u",
     "s",
+    "mark",
+    "sub",
+    "sup",
     "ul",
     "ol",
     "li",
@@ -44,10 +48,41 @@ ALLOWED_TAGS = {
 }
 
 ALLOWED_ATTRS = {
-    "a": {"href", "title"},
-    "img": {"src", "alt", "title", "width", "height"},
+    "a": {"href", "title", "target"},
+    "img": {"src", "alt", "title", "width", "height", "class"},
+    "figure": {"class"},
+    "table": {"class"},
     "span": {"class"},
 }
+
+#: CKEditor 5 emits a small set of layout classes. Keep the useful ones and
+#: drop everything else so authors cannot smuggle in arbitrary styling hooks.
+ALLOWED_CLASSES = {
+    "img": {"image_resized"},
+    "figure": {
+        "image",
+        "table",
+        "media",
+        "image-style-side",
+        "image-style-align-left",
+        "image-style-align-right",
+        "image-style-align-center",
+    },
+    "table": {"table"},
+    "span": {
+        "text-tiny",
+        "text-small",
+        "text-big",
+        "text-huge",
+        "marker-yellow",
+        "marker-pink",
+        "marker-blue",
+        "marker-green",
+        "marker-red",
+    },
+}
+
+_CLASS_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 VOID_TAGS = {"br", "hr", "img"}
 
@@ -101,6 +136,19 @@ class _Sanitizer(HTMLParser):
                 if safe is None:
                     continue
                 value = safe
+            elif name == "class":
+                tokens = [
+                    token
+                    for token in value.split()
+                    if token in ALLOWED_CLASSES.get(tag, set())
+                    and _CLASS_TOKEN_RE.match(token)
+                ]
+                if not tokens:
+                    continue
+                value = " ".join(tokens)
+            elif name == "target":
+                if value != "_blank":
+                    continue
             rendered.append(f'{name}="{escape(value, quote=True)}"')
             if tag == "a" and name == "href":
                 rendered.append('rel="nofollow noopener noreferrer"')

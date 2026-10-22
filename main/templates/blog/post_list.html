@@ -1,45 +1,225 @@
 {% extends "base.html" %}
+{% load humanize %}
+
+{% block body_class %}tips-page{% endblock %}
 
 {% block content %}
-<div class="container">
-  <div class="breadcrumb">
-    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span> <span>Blog</span>
-  </div>
+<section class="tips-hero">
+  <div class="container">
+    <div class="tips-hero-grid">
+      <div class="tips-hero-copy">
+        <div class="breadcrumb">
+          <a href="{% url 'campus:landing' %}">Home</a> <span>→</span>
+          {% if active_category %}
+            <a href="{% url 'blog:post_list' %}">Pro Tips</a> <span>→</span>
+            <span>{{ active_category.name }}</span>
+          {% else %}
+            <span>Pro Tips</span>
+          {% endif %}
+        </div>
 
-  <div class="page-head">
-    <h1>Blog</h1>
-    <p>Notes on secret crushes, college crushes and keeping things private.</p>
-  </div>
+        <span class="hero-kicker">
+          {% include "components/icon.html" with name="sparkle" size=13 %}
+          Field notes · no fluff
+        </span>
 
-  {% if posts %}
-    <div class="blog-grid">
-      {% for post in posts %}
-        <a class="post-card" href="{{ post.get_absolute_url }}">
-          <span class="post-meta">
-            {{ post.published_at|date:"F j, Y" }} · {{ post.reading_minutes }} min read
+        {% if active_category %}
+          <h1 class="tips-title">{{ active_category.name }}</h1>
+          <p class="tips-lede">
+            {{ active_category.description|default:"The useful, slightly secret side of WhoIsMyCrush — explained like a friend would." }}
+          </p>
+        {% else %}
+          <h1 class="tips-title">Pro <span class="accent">tips</span></h1>
+          <p class="tips-lede">
+            Account guides, feature tutorials, privacy checks and the tiny
+            website tricks that make campus feel a little more yours.
+          </p>
+        {% endif %}
+
+        <form class="tips-search" method="get" action="{% if active_category %}{{ active_category.get_absolute_url }}{% else %}{% url 'blog:post_list' %}{% endif %}" role="search">
+          <label class="sr-only" for="tip-search">Search Pro Tips</label>
+          <span class="tips-search-icon" aria-hidden="true">
+            {% include "components/icon.html" with name="search" size=18 %}
           </span>
-          <h2>{{ post.title }}</h2>
-          <p>{{ post.excerpt }}</p>
-          <span class="read">Read →</span>
-        </a>
-      {% endfor %}
-    </div>
+          <input id="tip-search" type="search" name="q" value="{{ search_query }}" placeholder="Search: privacy, profile, matching…" autocomplete="off">
+          <button class="btn btn-primary btn-sm" type="submit">Search</button>
+        </form>
 
-    {% if is_paginated %}
-      <nav class="pagination" aria-label="Pagination">
-        {% if page_obj.has_previous %}
-          <a class="page-link" href="?page={{ page_obj.previous_page_number }}">← Newer</a>
+        {% if search_query %}
+          <p class="tips-search-note">
+            Showing {{ page_obj.paginator.count|intcomma }} result{{ page_obj.paginator.count|pluralize }}
+            for “{{ search_query }}”.
+            <a href="{% if active_category %}{{ active_category.get_absolute_url }}{% else %}{% url 'blog:post_list' %}{% endif %}">Clear search</a>
+          </p>
         {% endif %}
-        <span class="is-current">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
-        {% if page_obj.has_next %}
-          <a class="page-link" href="?page={{ page_obj.next_page_number }}">Older →</a>
-        {% endif %}
-      </nav>
-    {% endif %}
-  {% else %}
-    <div class="paper" style="text-align:center">
-      <p class="muted">No posts yet. Check back soon.</p>
+      </div>
+
+      <aside class="tips-note" aria-label="About Pro Tips">
+        <span class="tape" aria-hidden="true"></span>
+        <span class="note-label">THE FINE PRINT</span>
+        <p class="hand">The rules are short. The tips are not.</p>
+        <ul class="tips-note-list">
+          <li><strong>{{ total_published|intcomma }}</strong> field note{{ total_published|pluralize }}</li>
+          <li><strong>2–6 min</strong> reads, no lectures</li>
+          <li><strong>100%</strong> campus-safe advice</li>
+        </ul>
+        <span class="tips-note-foot">est. for curious students ✦</span>
+      </aside>
     </div>
-  {% endif %}
-</div>
+  </div>
+</section>
+
+<section class="tips-body">
+  <div class="container">
+    <nav class="tips-chips" aria-label="Pro Tips categories">
+      <a class="tip-chip{% if not active_category %} is-active{% endif %}" href="{% url 'blog:post_list' %}">
+        All tips <span>{{ total_published|intcomma }}</span>
+      </a>
+      {% for category in categories %}
+        {% if category.published_count %}
+          <a class="tip-chip{% if active_category.slug == category.slug %} is-active{% endif %}" href="{{ category.get_absolute_url }}">
+            {{ category.name }} <span>{{ category.published_count }}</span>
+          </a>
+        {% endif %}
+      {% endfor %}
+    </nav>
+
+    {% if lead %}
+      <div class="tips-lead-grid">
+        <a class="tip-lead" href="{{ lead.get_absolute_url }}">
+          <span class="tip-lead-media">
+            {% if lead.featured_image %}
+              <img src="{{ lead.featured_image.url }}" alt="{{ lead.title }}" loading="eager">
+            {% else %}
+              <span class="tip-pattern accent-{{ lead.accent }}" aria-hidden="true">
+                <span class="tip-pattern-mark">?</span>
+                <span class="tip-pattern-word">{{ lead.category.name|default:"field note" }}</span>
+              </span>
+            {% endif %}
+            {% if lead_is_featured %}
+              <span class="stamp tip-lead-stamp">Featured</span>
+            {% else %}
+              <span class="stamp stamp-ink tip-lead-stamp">Fresh</span>
+            {% endif %}
+          </span>
+          <span class="tip-lead-copy">
+            <span class="tip-kicker-row">
+              {% if lead.category %}
+                <span class="sticker sticker-{{ lead.category.accent }}">{{ lead.category.name }}</span>
+              {% endif %}
+              <span class="post-meta">{{ lead.published_at|date:"M j, Y" }} · {{ lead.reading_minutes }} min read</span>
+            </span>
+            <span class="tip-lead-title">{{ lead.title }}</span>
+            <span class="tip-lead-excerpt">{{ lead.excerpt }}</span>
+            <span class="tip-read">Read the tip <span aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+        {% if featured_posts %}
+          <aside class="tips-picks" aria-label="More featured tips">
+            <span class="tiny-label">Editor’s picks</span>
+            {% for item in featured_posts %}
+              <a class="tip-pick" href="{{ item.get_absolute_url }}">
+                {% if item.category %}
+                  <span class="sticker sticker-{{ item.category.accent }}">{{ item.category.name }}</span>
+                {% endif %}
+                <span class="tip-pick-title">{{ item.title }}</span>
+                <span class="tip-pick-meta">{{ item.reading_minutes }} min read <span aria-hidden="true">→</span></span>
+              </a>
+            {% endfor %}
+          </aside>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {% if posts %}
+      <div class="tips-grid-head">
+        <h2>
+          {% if search_query %}Search results{% elif active_category %}More {{ active_category.name|lower }}{% else %}Latest tips{% endif %}
+        </h2>
+        <span class="tiny-label">{{ page_obj.paginator.count|intcomma }} note{{ page_obj.paginator.count|pluralize }}</span>
+      </div>
+
+      <div class="tips-grid">
+        {% for post in posts %}
+          <a class="tip-card" href="{{ post.get_absolute_url }}">
+            <span class="tip-card-media">
+              {% if post.featured_image %}
+                <img src="{{ post.featured_image.url }}" alt="{{ post.title }}" loading="lazy">
+              {% else %}
+                <span class="tip-pattern accent-{{ post.accent }}" aria-hidden="true">
+                  <span class="tip-pattern-mark">?</span>
+                  <span class="tip-pattern-word">{{ post.category.name|default:"field note" }}</span>
+                </span>
+              {% endif %}
+              {% if post.is_featured %}
+                <span class="tip-card-star" title="Featured">★</span>
+              {% endif %}
+            </span>
+            <span class="tip-card-body">
+              <span class="tip-kicker-row">
+                {% if post.category %}
+                  <span class="sticker sticker-{{ post.category.accent }}">{{ post.category.name }}</span>
+                {% endif %}
+                <span class="post-meta">{{ post.reading_minutes }} min read</span>
+              </span>
+              <span class="tip-card-title">{{ post.title }}</span>
+              <span class="tip-card-excerpt">{{ post.excerpt|truncatechars:130 }}</span>
+              <span class="tip-card-foot">
+                <span>{{ post.published_at|date:"M j, Y" }}</span>
+                <span class="tip-read">Read <span aria-hidden="true">→</span></span>
+              </span>
+            </span>
+          </a>
+        {% endfor %}
+      </div>
+
+      {% if is_paginated %}
+        <nav class="pagination tips-pagination" aria-label="Pro Tips pages">
+          {% if page_obj.has_previous %}
+            <a class="page-link" href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}">← Newer</a>
+          {% else %}
+            <span class="page-link is-disabled">← Newer</span>
+          {% endif %}
+          <span class="is-current">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a class="page-link" href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}">Older →</a>
+          {% else %}
+            <span class="page-link is-disabled">Older →</span>
+          {% endif %}
+        </nav>
+      {% endif %}
+    {% elif not lead %}
+      <div class="paper tips-empty">
+        <span class="stamp">Nothing here</span>
+        <h2>{% if search_query %}No tips match that{% else %}The board is still empty{% endif %}</h2>
+        {% if search_query %}
+          <p>Try a broader search — “privacy”, “match”, “profile”, “account” — or browse every tip.</p>
+          <a class="btn btn-primary" href="{% url 'blog:post_list' %}">See all Pro Tips</a>
+        {% else %}
+          <p>New guides are pinned here soon. In the meantime, the game is waiting.</p>
+          <a class="btn btn-primary" href="{% url 'campus:landing' %}">Enter your campus</a>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="tips-cta">
+  <div class="container tips-cta-inner">
+    <div>
+      <span class="tiny-label">STILL CURIOUS?</span>
+      <h2>The best tip is a private one.</h2>
+      <p>Pick up to 3 people from your college. Nobody knows unless they picked you too.</p>
+    </div>
+    <div class="tips-cta-actions">
+      {% if user.is_authenticated and has_campus_id %}
+        <a class="btn btn-primary" href="{% url 'campus:secret' %}">Open my secret</a>
+      {% else %}
+        <a class="btn btn-primary" href="{% url 'accounts:register' %}">Join your campus</a>
+      {% endif %}
+      <a class="btn" href="{% url 'core:how_it_works' %}">How it works</a>
+    </div>
+  </div>
+</section>
 {% endblock %}

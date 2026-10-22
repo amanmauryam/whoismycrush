@@ -8,6 +8,7 @@
 
     <nav class="nav-links" id="nav-links" aria-label="Main">
       <a class="nav-link{% if nav_home %} is-active{% endif %}" href="{% url 'core:how_it_works' %}">How it works</a>
+      <a class="nav-link{% if nav_blog %} is-active{% endif %}" href="{% url 'blog:post_list' %}">Pro Tips</a>
       {% if user.is_authenticated %}
         <a class="nav-link{% if nav_secret %} is-active{% endif %}" href="{% url 'campus:secret' %}">My secret</a>
         <a class="nav-link{% if nav_matches %} is-active{% endif %}" href="{% url 'campus:matches' %}">Matches</a>

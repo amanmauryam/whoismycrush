@@ -1,45 +1,177 @@
 {% extends "base.html" %}
+{% load static %}
+
+{% block body_class %}tip-article-page{% endblock %}
 
 {% block content %}
-<article class="container narrow article">
-  <div class="breadcrumb">
-    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span>
-    <a href="{% url 'blog:post_list' %}">Blog</a> <span>→</span>
-    <span>{{ post.title }}</span>
-  </div>
+<div class="reading-progress" data-reading-progress aria-hidden="true"><span></span></div>
 
-  <header class="page-head">
-    <h1>{{ post.title }}</h1>
-    <p class="post-meta">
-      {{ post.published_at|date:"F j, Y" }} · {{ post.reading_minutes }} min read
-      {% if post.author_name %} · {{ post.author_name }}{% endif %}
-    </p>
+<article class="tip-article">
+  <header class="tip-article-hero">
+    <div class="container narrow">
+      <div class="breadcrumb">
+        <a href="{% url 'campus:landing' %}">Home</a> <span>→</span>
+        <a href="{% url 'blog:post_list' %}">Pro Tips</a>
+        {% if post.category %}
+          <span>→</span> <a href="{{ post.category.get_absolute_url }}">{{ post.category.name }}</a>
+        {% endif %}
+      </div>
+
+      <div class="tip-kicker-row">
+        {% if post.category %}
+          <a class="sticker sticker-{{ post.category.accent }}" href="{{ post.category.get_absolute_url }}">{{ post.category.name }}</a>
+        {% endif %}
+        {% if post.is_featured %}
+          <span class="stamp">Featured</span>
+        {% endif %}
+      </div>
+
+      <h1 class="tip-article-title">{{ post.title }}</h1>
+      <p class="tip-article-dek">{{ post.excerpt }}</p>
+
+      <div class="tip-byline">
+        <span class="byline-mark" aria-hidden="true">?</span>
+        <span class="byline-copy">
+          <strong>{{ post.author_name }}</strong>
+          <span>{{ post.published_at|date:"F j, Y" }} · {{ post.reading_minutes }} min read · {{ post.word_count }} words</span>
+        </span>
+        <button class="btn btn-sm byline-share" type="button" data-copy-link data-copy-url="{{ request.build_absolute_uri }}">
+          {% include "components/icon.html" with name="link" size=15 %}
+          <span>Copy link</span>
+        </button>
+      </div>
+    </div>
+
+    {% if post.featured_image %}
+      <figure class="container tip-cover">
+        <img src="{{ post.featured_image.url }}" alt="{{ post.title }}" loading="eager">
+        {% if post.category %}
+          <figcaption>{{ post.category.name }} · a Pro Tip from WhoIsMyCrush</figcaption>
+        {% endif %}
+      </figure>
+    {% endif %}
   </header>
 
-  {% if post.featured_image %}
-    <img src="{{ post.featured_image.url }}" alt="{{ post.title }}" class="post-hero">
-  {% endif %}
+  <div class="container tip-article-layout{% if not toc %} tip-article-layout-solo{% endif %}">
+    {% if toc %}
+      <details class="tip-toc-mobile">
+        <summary>In this tip</summary>
+        <nav aria-label="On this page">
+          {% for item in toc %}
+            <a class="toc-link toc-level-{{ item.level }}" href="#{{ item.id }}">{{ item.text }}</a>
+          {% endfor %}
+        </nav>
+      </details>
 
-  <div class="article-body prose">
-    {{ post.body_html|safe }}
+      <aside class="tip-toc" aria-label="On this page">
+        <span class="tiny-label">In this tip</span>
+        <nav>
+          {% for item in toc %}
+            <a class="toc-link toc-level-{{ item.level }}" href="#{{ item.id }}">{{ item.text }}</a>
+          {% endfor %}
+        </nav>
+        <a class="tip-toc-top" href="#main">Back to top ↑</a>
+      </aside>
+    {% endif %}
+
+    <div class="tip-article-body prose" data-article-body>
+      {{ body_html|safe }}
+
+      <div class="tip-endmark" aria-hidden="true">
+        <span>✦</span>
+        <span>that’s the tip</span>
+      </div>
+
+      <div class="tip-share-row">
+        <span class="tiny-label">Keep it handy</span>
+        <button class="btn btn-sm" type="button" data-copy-link data-copy-url="{{ request.build_absolute_uri }}">
+          {% include "components/icon.html" with name="link" size=15 %}
+          <span>Copy article link</span>
+        </button>
+        <a class="btn btn-sm" href="{% url 'blog:post_list' %}">All Pro Tips</a>
+      </div>
+
+      <div class="tip-inline-cta">
+        <div>
+          <span class="tiny-label">WANT THE REAL THING?</span>
+          <h2>Find out if it’s mutual.</h2>
+          <p>Pick up to 3 people from your college. Your list stays hidden until someone picks you too.</p>
+        </div>
+        {% if user.is_authenticated and has_campus_id %}
+          <a class="btn btn-primary" href="{% url 'campus:secret' %}">Open my secret</a>
+        {% else %}
+          <a class="btn btn-primary" href="{% url 'accounts:register' %}">Enter your campus</a>
+        {% endif %}
+      </div>
+    </div>
   </div>
 
   {% if related %}
-    <hr>
-    <h2>Keep reading</h2>
-    <div class="blog-grid">
-      {% for item in related %}
-        <a class="post-card" href="{{ item.get_absolute_url }}">
-          <span class="post-meta">{{ item.published_at|date:"F j, Y" }}</span>
-          <h3>{{ item.title }}</h3>
-        </a>
-      {% endfor %}
-    </div>
+    <section class="tip-related">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <span class="section-label">KEEP READING</span>
+            <h2>More from the board</h2>
+          </div>
+          <a class="link-btn" href="{% url 'blog:post_list' %}">All Pro Tips →</a>
+        </div>
+
+        <div class="tips-grid">
+          {% for item in related %}
+            <a class="tip-card" href="{{ item.get_absolute_url }}">
+              <span class="tip-card-media">
+                {% if item.featured_image %}
+                  <img src="{{ item.featured_image.url }}" alt="{{ item.title }}" loading="lazy">
+                {% else %}
+                  <span class="tip-pattern accent-{{ item.accent }}" aria-hidden="true">
+                    <span class="tip-pattern-mark">?</span>
+                    <span class="tip-pattern-word">{{ item.category.name|default:"field note" }}</span>
+                  </span>
+                {% endif %}
+              </span>
+              <span class="tip-card-body">
+                <span class="tip-kicker-row">
+                  {% if item.category %}
+                    <span class="sticker sticker-{{ item.category.accent }}">{{ item.category.name }}</span>
+                  {% endif %}
+                  <span class="post-meta">{{ item.reading_minutes }} min read</span>
+                </span>
+                <span class="tip-card-title">{{ item.title }}</span>
+                <span class="tip-card-excerpt">{{ item.excerpt|truncatechars:110 }}</span>
+                <span class="tip-card-foot">
+                  <span>{{ item.published_at|date:"M j, Y" }}</span>
+                  <span class="tip-read">Read <span aria-hidden="true">→</span></span>
+                </span>
+              </span>
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
   {% endif %}
 
-  <div class="prose-cta">
-    <a class="btn btn-primary" href="{% if user.is_authenticated and has_campus_id %}{% url 'campus:secret' %}{% else %}{% url 'accounts:register' %}{% endif %}">Enter your campus</a>
-    <a class="btn" href="{% url 'blog:post_list' %}">All posts</a>
-  </div>
+  {% if newer_post or older_post %}
+    <nav class="container tips-adjacent" aria-label="More Pro Tips">
+      {% if newer_post %}
+        <a class="tip-adjacent-link" href="{{ newer_post.get_absolute_url }}">
+          <span class="tiny-label">← Newer</span>
+          <strong>{{ newer_post.title }}</strong>
+        </a>
+      {% else %}
+        <span></span>
+      {% endif %}
+      {% if older_post %}
+        <a class="tip-adjacent-link tip-adjacent-next" href="{{ older_post.get_absolute_url }}">
+          <span class="tiny-label">Older →</span>
+          <strong>{{ older_post.title }}</strong>
+        </a>
+      {% endif %}
+    </nav>
+  {% endif %}
 </article>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/pro-tips.js' %}" defer></script>
 {% endblock %}

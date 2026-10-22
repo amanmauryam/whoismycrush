@@ -16,7 +16,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python manage.py migrate
-python manage.py seed_posts        # launch blog guides (idempotent)
+python manage.py seed_posts        # Pro Tips guides + categories (idempotent)
 python manage.py createsuperuser
 python manage.py runserver
 ```
@@ -28,6 +28,16 @@ python manage.py seed_demo         # a college + several campus IDs
 python manage.py seed_match        # one admin-verified mutual crush
 ```
 
+## Pro Tips
+
+Public guides live at `/pro-tips/` with search, category archives, featured
+posts and related reading. Staff author them in Django admin with CKEditor 5.
+Cover images and inline editor uploads are limited to JPG, PNG, WEBP or GIF,
+max 5 MB. Old `/blog/` links permanently redirect.
+
+After deploying, run `python manage.py collectstatic` so CKEditor's static
+assets and the Pro Tips styles/scripts are available to WhiteNoise.
+
 ## Tests
 
 ```powershell
@@ -36,7 +46,7 @@ python manage.py test
 
 `RATELIMIT_ENABLE` defaults to **off** under the test runner so shared cache
 counters never make results order-dependent. Everything else — rate limiting,
-email verification, sanitized blog rendering — is covered.
+email verification, sanitized Pro Tips rendering — is covered.
 
 ## The one non-negotiable rule
 

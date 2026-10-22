@@ -6,7 +6,7 @@
 | --- | --- |
 | `accounts` | Sign-up/login, password reset, and the email-verification state that belongs to the *account*, not the campus identity. |
 | `campus` | The core domain: colleges, campus identities, hand-typed crush entries, matching, verification, notifications, privacy centre. |
-| `blog` | Public guides. Bodies are staff-authored HTML, sanitized at render time. |
+| `blog` | Pro Tips. CKEditor-authored guides with categories, featured posts, search and sanitized rendering. |
 | `config` | Settings, the root URLconf, marketing pages, FAQ content, JSON-LD builders, the HTML sanitizer, and rate limiting. |
 
 `config` is not registered as a Django app; its `templatetags.seo` library is
@@ -84,7 +84,9 @@ invalidate the emailed link.
 
 - Marketing pages (`config`): about, how-it-works, secret-crush, mutual-crush,
   college-crush, FAQ, safety, privacy, terms, contact (honeypot + ratelimit).
-- `blog`: manager-provided publishing (drafts/future dates hidden), sanitized
-  `body_html`, per-post SEO fields, related posts.
+- `blog`: Pro Tips at `/pro-tips/` with manager-provided publishing
+  (drafts/future dates hidden), categories, featured lead, search, pagination,
+  sanitized `body_html`, a generated table of contents, per-post SEO fields and
+  related posts. CKEditor 5 is staff-only for both authoring and uploads.
 - `campus/college_landing`: public but **not** a directory; `noindex` until a
   campus has enough members. Never appears in the sitemap.

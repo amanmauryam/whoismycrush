@@ -3,15 +3,17 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.sitemaps.views import sitemap
 from django.urls import include, path
-from django.views.generic import TemplateView
+from django.views.generic import RedirectView, TemplateView
 
-from blog.sitemaps import BlogSitemap
+from blog.sitemaps import BlogSitemap, CategorySitemap
+from blog.views import legacy_post_redirect
 from config import views as core_views
 from config.sitemaps import AbsoluteUrlSitemap
 
 sitemaps = {
     "static": AbsoluteUrlSitemap,
     "blog": BlogSitemap,
+    "blog-categories": CategorySitemap,
 }
 
 core_patterns = (
@@ -38,7 +40,15 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("campus.urls")),
     path("", include("accounts.urls")),
-    path("blog/", include("blog.urls")),
+    path("pro-tips/", include("blog.urls")),
+    path(
+        "blog/",
+        RedirectView.as_view(
+            pattern_name="blog:post_list", permanent=True, query_string=True
+        ),
+        name="legacy_blog_list",
+    ),
+    path("blog/<slug:slug>/", legacy_post_redirect, name="legacy_blog_detail"),
     path("", include(core_patterns)),
     path(
         "sitemap.xml",

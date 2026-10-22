@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "django.contrib.sites",
     "django.contrib.humanize",
     "django.contrib.sitemaps",
+    "django_ckeditor_5",
     "accounts",
     "campus",
     "blog",
@@ -132,6 +133,125 @@ STORAGES = {
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# ---------------------------------------------------------------------------
+# CKEditor 5 (django-ckeditor-5 0.2.20)
+#
+# Verified against this project's Django 5.2.17 / Python 3.14.7 runtime:
+# the package declares Django>=4.2 and Python>=3.8. It stores rich text in a
+# normal TextField, is GPL-licensed, and its upload endpoint is replaced below
+# with a staff-only view that applies the same image validation as covers.
+# ---------------------------------------------------------------------------
+CKEDITOR_5_CONFIGS = {
+    "default": {
+        "toolbar": ["heading", "|", "bold", "italic"],
+    },
+    "extends": {
+        "toolbar": [
+            {
+                "name": "document",
+                "items": [
+                    "heading",
+                    "|",
+                    "bold",
+                    "italic",
+                    "underline",
+                    "strikethrough",
+                    "code",
+                    "|",
+                    "link",
+                    "insertImage",
+                    "uploadImage",
+                    "insertTable",
+                    "blockQuote",
+                    "horizontalLine",
+                ],
+            },
+            {
+                "name": "lists",
+                "items": [
+                    "bulletedList",
+                    "numberedList",
+                    "|",
+                    "outdent",
+                    "indent",
+                ],
+            },
+            {
+                "name": "tools",
+                "items": [
+                    "findAndReplace",
+                    "specialCharacters",
+                    "|",
+                    "removeFormat",
+                    "|",
+                    "undo",
+                    "redo",
+                ],
+            },
+        ],
+        "heading": {
+            "options": [
+                {"model": "paragraph", "title": "Paragraph"},
+                {
+                    "model": "heading1",
+                    "view": "h2",
+                    "title": "Heading 2",
+                    "class": "ck-heading_heading2",
+                },
+                {
+                    "model": "heading2",
+                    "view": "h3",
+                    "title": "Heading 3",
+                    "class": "ck-heading_heading3",
+                },
+                {
+                    "model": "heading3",
+                    "view": "h4",
+                    "title": "Heading 4",
+                    "class": "ck-heading_heading4",
+                },
+            ]
+        },
+        "image": {
+            "styles": ["inline", "block", "side"],
+            "toolbar": [
+                "imageStyle:inline",
+                "imageStyle:block",
+                "imageStyle:side",
+                "|",
+                "toggleImageCaption",
+                "imageTextAlternative",
+                "|",
+                "linkImage",
+            ],
+        },
+        "table": {
+            "contentToolbar": [
+                "tableColumn",
+                "tableRow",
+                "mergeTableCells",
+                "tableProperties",
+                "tableCellProperties",
+            ]
+        },
+        "list": {
+            "properties": {
+                "styles": ["lower-roman", "upper-roman", "lower-latin", "upper-latin"],
+                "startIndex": True,
+                "reversed": True,
+            }
+        },
+        "link": {"addTargetToExternalLinks": True},
+        "wordCount": {"displayWords": True, "displayCharacters": False},
+    },
+}
+
+CKEDITOR_5_FILE_UPLOAD_PERMISSION = "staff"
+CKEDITOR_5_ALLOW_ALL_FILE_TYPES = False
+CKEDITOR_5_MAX_FILE_SIZE = 5  # MB
+CKEDITOR_5_UPLOAD_FILE_TYPES = ["jpg", "jpeg", "png", "webp", "gif"]
+CK_EDITOR_5_UPLOAD_FILE_VIEW_NAME = "blog:editor_image_upload"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

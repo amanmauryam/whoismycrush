@@ -17,6 +17,7 @@
         <h2>The game</h2>
         <ul>
           <li><a href="{% url 'core:how_it_works' %}">How it works</a></li>
+          <li><a href="{% url 'blog:post_list' %}">Pro Tips</a></li>
           {% if user.is_authenticated %}
             <li><a href="{% url 'campus:secret' %}">My secret</a></li>
             <li><a href="{% url 'campus:matches' %}">Matches</a></li>

@@ -91,9 +91,16 @@ def article(post) -> dict:
         "dateModified": post.updated_at.isoformat() if post.updated_at else None,
         "author": {"@type": "Organization", "name": post.author_name or "WhoIsMyCrush"},
         "publisher": {"@type": "Organization", "name": "WhoIsMyCrush"},
-        "mainEntityOfPage": post.get_absolute_url(),
-        "url": post.get_absolute_url(),
+        "mainEntityOfPage": f"{base}{post.get_absolute_url()}",
+        "url": f"{base}{post.get_absolute_url()}",
+        "articleSection": post.category.name if post.category else None,
+        "wordCount": post.word_count,
+        "timeRequired": f"PT{post.reading_minutes}M",
+        "isAccessibleForFree": True,
     }
+    if post.featured_image:
+        image = post.image_url
+        data["image"] = [image if image.startswith("http") else f"{base}{image}"]
     if post.updated_at:
         data["dateModified"] = post.updated_at.isoformat()
     return {k: v for k, v in data.items() if v is not None}

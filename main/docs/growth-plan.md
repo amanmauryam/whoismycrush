@@ -18,13 +18,18 @@ signups.
   dashboard (existing student).
 - The college landing has a copy-to-clipboard join link and an OG-ready card.
 
-### Blog (`blog`)
+### Pro Tips (`blog`)
 
+- Canonical home at `/pro-tips/`; old `/blog/` URLs permanently redirect.
 - Manager-backed publishing: drafts and future-dated posts are never visible.
-- Sanitized HTML bodies (`config.sanitize.sanitize_html`) — scripts and their
+- CKEditor 5 authoring for staff, with validated inline images and covers.
+- Categories, featured lead, search, pagination and related reading.
+- Sanitized HTML bodies (`config.sanitize.sanitize_html`) - scripts and their
   contents are dropped, event handlers stripped, unsafe URL schemes refused.
-- Per-post SEO fields, related posts, reading time, `BlogPosting` JSON-LD.
-- Launch content: `python manage.py seed_posts` (idempotent, 10 guides).
+- Per-post SEO fields, reading time, generated table of contents and
+  `BlogPosting` JSON-LD.
+- Launch content: `python manage.py seed_posts` (idempotent, 14 guides across
+  six categories).
 
 ### FAQ (`/faq/`)
 

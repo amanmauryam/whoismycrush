@@ -12,7 +12,84 @@ from datetime import timedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from blog.models import Post
+from blog.models import Category, Post
+
+CATEGORIES = [
+    {
+        "slug": "account-guides",
+        "name": "Account guides",
+        "description": "Sign-up, profile and privacy settings without the guesswork.",
+        "accent": "blue",
+        "order": 1,
+    },
+    {
+        "slug": "feature-tutorials",
+        "name": "Feature tutorials",
+        "description": "Campus picker, secret list, matches and the small buttons that matter.",
+        "accent": "pink",
+        "order": 2,
+    },
+    {
+        "slug": "secret-tips",
+        "name": "Secret tips",
+        "description": "The unwritten rules of campus crushes, mutual matches and being brave-ish.",
+        "accent": "yellow",
+        "order": 3,
+    },
+    {
+        "slug": "privacy",
+        "name": "Privacy",
+        "description": "What stays secret, what the site can see and how to lock things down.",
+        "accent": "green",
+        "order": 4,
+    },
+    {
+        "slug": "troubleshooting",
+        "name": "Troubleshooting",
+        "description": "When a link, account or campus does not behave. Fix it here.",
+        "accent": "red",
+        "order": 5,
+    },
+    {
+        "slug": "website-tricks",
+        "name": "Website tricks",
+        "description": "Tiny shortcuts and smart moves that make the site feel faster.",
+        "accent": "blue",
+        "order": 6,
+    },
+]
+
+POST_CATEGORIES = {
+    "why-your-secret-crush-feels-impossible-to-say-out-loud": "secret-tips",
+    "what-is-a-secret-crush-really": "secret-tips",
+    "how-to-tell-if-someone-likes-you-without-asking": "secret-tips",
+    "the-case-for-keeping-your-crush-list-private": "privacy",
+    "college-crush-culture-why-campus-only-matters": "secret-tips",
+    "what-to-do-after-a-mutual-crush-match": "feature-tutorials",
+    "secret-admirer-vs-secret-crush": "secret-tips",
+    "is-it-weird-to-have-a-crush-on-a-classmate": "secret-tips",
+    "how-to-handle-a-crush-you-cant-act-on": "secret-tips",
+    "the-psychology-of-mutual-attraction": "secret-tips",
+    "create-your-secret-profile-without-overthinking-it": "account-guides",
+    "campus-picker-tutorial-find-or-add-your-college": "feature-tutorials",
+    "cant-find-your-college-quick-troubleshooting": "troubleshooting",
+    "5-small-website-tricks-that-make-whoismycrush-easier": "website-tricks",
+}
+
+FEATURED_POSTS = {
+    "create-your-secret-profile-without-overthinking-it",
+    "how-to-tell-if-someone-likes-you-without-asking",
+    "the-case-for-keeping-your-crush-list-private",
+}
+
+# The later additions are launch content, so keep them near the top of the
+# archive instead of letting the line number make them look months old.
+NEW_POST_DAYS_AGO = {
+    "create-your-secret-profile-without-overthinking-it": 2,
+    "campus-picker-tutorial-find-or-add-your-college": 5,
+    "cant-find-your-college-quick-troubleshooting": 8,
+    "5-small-website-tricks-that-make-whoismycrush-easier": 11,
+}
 
 POSTS = [
     {
@@ -438,6 +515,178 @@ to turn a suspicion into a fact is to get the one piece of information you
 are missing.</p>
 """,
     },
+    {
+        "slug": "create-your-secret-profile-without-overthinking-it",
+        "title": "Create your secret profile without overthinking it",
+        "excerpt": "A three-minute setup, one good username, and exactly zero reasons to panic.",
+        "body": """
+<p>Your profile is not a job application. Nobody is grading the bio. The whole
+point of a secret profile is that it gives you a safe little corner to be
+curious in - so the setup should take minutes, not an entire evening.</p>
+
+<h2>Start with the absolute basics</h2>
+<p>Pick the email you actually check, choose a password you have not reused
+everywhere else, and get through the confirmation step. That is the boring
+part done. If you get stuck, the troubleshooting guide is more useful than
+refreshing the same screen twelve times.</p>
+
+<h2>Pick a username you can live with</h2>
+<p>You do not need a username that explains your entire personality. Something
+short, readable and not identical to your public handles is plenty. Avoid your
+full name, your roll number, your hostel room and that one nickname only your
+family uses. Future you will appreciate the restraint.</p>
+
+<h2>Keep identifying details out of the bio</h2>
+<p>A little mystery is good. A full timetable is not. Skip exact class
+sections, phone numbers, home addresses and anything that would make you
+obvious to someone who already knows you. If you want to mention your course
+or a harmless interest, that is fine - just leave yourself some room.</p>
+
+<h2>Check the settings people forget</h2>
+<p>Before you start adding names, look at who can see your activity and what
+shows up on your profile. Decide whether you want notifications on, whether
+you are comfortable with matches being visible, and whether you want to keep
+your list private. You can always loosen things later. Starting private is a
+lot easier than trying to unshare something.</p>
+
+<h2>You can change your mind later</h2>
+<p>Usernames, bios and privacy choices are not permanent. The profile is there
+to serve you, not the other way around. Set it up, use it for a week, then
+adjust whatever feels off. That is the entire strategy.</p>
+""",
+    },
+    {
+        "slug": "campus-picker-tutorial-find-or-add-your-college",
+        "title": "Campus picker tutorial: find or add your college",
+        "excerpt": "The campus picker is the difference between a random feed and a campus feed.",
+        "body": """
+<p>The campus picker is one of those small features that changes the whole
+experience. Choose the right campus and the site stops feeling like a giant
+anonymous noticeboard. Choose nothing and you are basically browsing the
+internet with extra steps.</p>
+
+<h2>What the campus picker actually does</h2>
+<p>Your campus selection tells the site which community you belong to. It
+helps keep crushes, matches and suggestions relevant to the people around
+you. It is not a public location check-in, and it does not put a pin on a map
+with your name on it. It is just the filter that makes your feed make sense.</p>
+
+<h2>Find your college</h2>
+<ol>
+<li>Open your profile or the campus picker screen.</li>
+<li>Type the name of your college the way you would normally say it.</li>
+<li>If the exact result appears, select it and save.</li>
+<li>Check that your feed or profile now shows the correct campus.</li>
+</ol>
+<p>Short names usually work better than the full official title. Try the name
+people actually use on campus before you try the version from the prospectus.</p>
+
+<h2>If your college is missing</h2>
+<p>Use the option to add your campus and enter the details carefully. Double
+check the spelling before submitting, because a duplicate campus with a typo
+is annoying for everyone. If the form asks for a city or short name, fill both
+in - it makes the campus easier for other students to find later.</p>
+
+<h2>Switching campuses without losing your list</h2>
+<p>Changing your campus does not have to mean starting over. Your secret list
+is tied to your account, not to the campus filter. Switch when you need to,
+then switch back. If something looks empty afterward, refresh the page once
+before assuming the worst.</p>
+
+<h2>Why the campus filter matters</h2>
+<p>A crush is usually local. The person you keep thinking about is probably
+someone you pass in a corridor, share a lecture with or see in the canteen.
+The campus picker keeps the experience close to that reality. It is a small
+setting with a surprisingly big effect on how useful the site feels.</p>
+""",
+    },
+    {
+        "slug": "cant-find-your-college-quick-troubleshooting",
+        "title": "Can't find your college? Quick troubleshooting",
+        "excerpt": "Before you declare the campus picker broken, try these five fixes.",
+        "body": """
+<p>College names are messy. One website uses the full official title, another
+uses a two-letter abbreviation, and the sign outside the gate uses something
+completely different. If your campus is not showing up, work through these
+checks in order.</p>
+
+<h2>1. Check the spelling, then check it again</h2>
+<p>Autocorrect is not your friend here. Try the name without punctuation, then
+without the word "University" or "College", then with it. A missing apostrophe
+or an extra space can hide a result that is already there.</p>
+
+<h2>2. Try the name people actually use</h2>
+<p>Search for the short name, the initials and the local nickname. If everyone
+on campus calls it something else, there is a decent chance the listing does
+too. Try the city plus the college name if the short version brings up too
+many results.</p>
+
+<h2>3. Clear the filter and start fresh</h2>
+<p>Sometimes the problem is not the search - it is the filter sitting quietly
+in the background. Clear any selected campus or category, reload the page and
+search again. If you are on a phone, close the keyboard and check that the
+search field actually contains what you typed.</p>
+
+<h2>4. Add the campus manually</h2>
+<p>If the college genuinely is not listed, use the add-campus option. Enter the
+name, city and short name as accurately as you can. Wait for the new listing
+to appear, then select it. Do not create a second entry just because the first
+one took a minute to show up.</p>
+
+<h2>5. Try a different browser or a hard refresh</h2>
+<p>A stale page can make a working feature look broken. Refresh properly, sign
+out and back in, or try another browser. If the campus still refuses to appear,
+take a screenshot of the error and contact support with your account email and
+the exact name you searched for.</p>
+
+<h2>One last thing</h2>
+<p>Do not panic if you cannot find your campus on the first attempt. This is a
+directory problem, not a you problem. Usually it is a spelling variation, a
+stale page or a genuinely missing listing - and all three have a fix.</p>
+""",
+    },
+    {
+        "slug": "5-small-website-tricks-that-make-whoismycrush-easier",
+        "title": "5 small website tricks that make WhoIsMyCrush easier",
+        "excerpt": "Tiny habits that save time, protect your privacy and make the site less chaotic.",
+        "body": """
+<p>None of these are secret cheat codes. They are just small habits that make
+the site feel smoother, especially once you have been using it for a while.</p>
+
+<h2>1. Set your campus before you browse</h2>
+<p>It is the first thing to fix and the easiest thing to forget. A relevant
+campus makes every other feature more useful. If the feed feels random, check
+the campus picker before you start blaming the algorithm.</p>
+
+<h2>2. Use search instead of scrolling forever</h2>
+<p>The Pro Tips search is there for a reason. Search for the feeling or the
+situation - "mutual", "privacy", "after a match" - rather than trying to
+remember the exact title. You will find the same article in a fraction of the
+time.</p>
+
+<h2>3. Copy the link when a tip is worth keeping</h2>
+<p>Every article has a copy-link button. Send it to yourself, drop it in a
+private note or share it with the one friend who needs to read it. A useful
+article you cannot find again is only slightly better than no article at all.</p>
+
+<h2>4. Keep your list and your browser history separate</h2>
+<p>If you share a laptop or phone, use a private window for the session or sign
+out when you are done. Your account settings protect what happens inside the
+site, but they cannot clean up a browser that someone else can open. A little
+basic hygiene goes a long way.</p>
+
+<h2>5. Read the privacy page before you need it</h2>
+<p>Most people look for privacy settings only after something has gone wrong.
+Spend two minutes now deciding what you are comfortable sharing. It is much
+easier to make that call when you are calm than when you are trying to undo a
+setting in a hurry.</p>
+
+<h2>The real trick</h2>
+<p>Use the site in a way that still feels like you. The campus filter, the
+search, the copy button and the privacy settings are all just tools. They are
+supposed to make the experience lighter - not turn it into another chore.</p>
+""",
+    },
 ]
 
 
@@ -446,12 +695,26 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         now = timezone.now()
+        categories = {}
+        for data in CATEGORIES:
+            category, _ = Category.objects.update_or_create(
+                slug=data["slug"],
+                defaults={
+                    "name": data["name"],
+                    "description": data["description"],
+                    "accent": data["accent"],
+                    "order": data["order"],
+                },
+            )
+            categories[data["slug"]] = category
         total = len(POSTS)
         created_count = 0
         for index, data in enumerate(POSTS):
             # Stagger publish dates so the index reads like a real archive,
             # newest first.
-            published_at = now - timedelta(days=index * 6)
+            published_at = now - timedelta(
+                days=NEW_POST_DAYS_AGO.get(data["slug"], index * 6)
+            )
             obj, created = Post.objects.update_or_create(
                 slug=data["slug"],
                 defaults={
@@ -461,6 +724,10 @@ class Command(BaseCommand):
                     "author_name": "WhoIsMyCrush",
                     "is_published": True,
                     "published_at": published_at,
+                    "category": categories.get(
+                        POST_CATEGORIES.get(data["slug"])
+                    ),
+                    "is_featured": data["slug"] in FEATURED_POSTS,
                 },
             )
             created_count += int(created)
