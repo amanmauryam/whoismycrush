@@ -415,7 +415,7 @@ class MutualMatch(models.Model):
         return self.user_b if self.user_a_id == student.pk else self.user_a
 
     def has_consented(self, student: StudentProfile) -> bool:
-        return self.user_b_consented if self.user_a_id == student.pk else self.user_a_consented
+        return self.user_a_consented if self.user_a_id == student.pk else self.user_b_consented
 
     def record_consent(self, student: StudentProfile) -> None:
         if self.user_a_id == student.pk:

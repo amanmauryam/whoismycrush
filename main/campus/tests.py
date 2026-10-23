@@ -279,6 +279,14 @@ class ApprovalTests(TestCase):
             approve_potential_match(self.proposal, self.admin)
         self.assertEqual(MutualMatch.objects.count(), 1)
 
+    def test_only_the_side_that_consented_reports_consent(self):
+        match = approve_potential_match(self.proposal, self.admin)
+        match.record_consent(self.a)
+        match.save(update_fields=["user_a_consented", "user_b_consented"])
+
+        self.assertTrue(match.has_consented(self.a))
+        self.assertFalse(match.has_consented(self.b))
+
     def test_rejection_closes_both_halves_and_notifies_nobody(self):
         reject_potential_match(self.proposal, self.admin, admin_notes="not them")
         self.assertEqual(MutualMatch.objects.count(), 0)

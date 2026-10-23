@@ -86,6 +86,7 @@ swallowing every confirmation link.
 
 ## Documentation
 
+- `docs/admin-guide.md` — daily/weekly admin operations, match verification, moderation.
 - `docs/architecture.md` — apps, models, flows, and invariants.
 - `docs/privacy-and-matching.md` — privacy guarantees, matching, verification.
 - `docs/seo-checklist.md` — what is indexable, structured data, share cards.
