@@ -43,6 +43,8 @@ def navigation(request):
         "has_campus_id": has_campus_id,
         "nav_home": path in ("", "/") or path.startswith("/about") or path.startswith("/how-it-works"),
         "nav_blog": path.startswith("/pro-tips") or path.startswith("/blog"),
+        "nav_faq": path.startswith("/faq"),
+        "nav_contact": path.startswith("/contact"),
         "nav_secret": path.startswith("/secret"),
         "nav_matches": path.startswith("/matches"),
         "nav_account": path.startswith("/campus-id") or path.startswith("/notifications"),

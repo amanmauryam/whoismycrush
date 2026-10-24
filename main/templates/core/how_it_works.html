@@ -57,6 +57,8 @@
   <div class="btn-row" style="margin-top:28px">
     <a class="btn btn-primary" href="{% if user.is_authenticated and has_campus_id %}{% url 'campus:secret' %}{% else %}{% url 'accounts:register' %}{% endif %}">Enter your campus</a>
     <a class="btn" href="{% url 'campus:privacy' %}">Read the privacy rules</a>
+    <a class="btn" href="{% url 'core:faq' %}">Read the FAQ</a>
+    <a class="btn" href="{% url 'core:contact' %}">Contact us</a>
   </div>
 </div>
 {% endblock %}

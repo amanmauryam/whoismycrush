@@ -141,6 +141,7 @@
     <div class="btn-row">
       <a class="btn btn-primary" href="{% if user.is_authenticated and has_campus_id %}{% url 'campus:secret' %}{% else %}{% url 'accounts:register' %}{% endif %}">Enter your campus</a>
       <a class="btn" href="{% url 'core:how_it_works' %}">How it works</a>
+      <a class="btn" href="{% url 'core:faq' %}">Read the FAQ</a>
     </div>
   </div>
 </section>
