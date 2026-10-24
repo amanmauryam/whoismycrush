@@ -89,7 +89,6 @@ the real match notifications. Never run them against production data.
 | `RATELIMIT_ENABLE` | `True` | Protects register/login/reset/crush actions from abuse. |
 | `CACHE_BACKEND` | `locmem` | Multi-worker production should use `redis` so limits are shared. |
 | `MINIMUM_AGE` | `18` | Age gate during identity creation. |
-| `CONTACT_EMAIL` | `DEFAULT_FROM_EMAIL` | Where the public contact form is delivered. |
 
 Full production checklist: `docs/deployment.md`.
 
@@ -231,9 +230,11 @@ Do not confuse the two verification concepts:
 
 ### 4.7 Contact inbox
 
-The public contact form is delivered to `CONTACT_EMAIL`, not to `/admin/`.
-Check that inbox daily. Reply from the same address, never from a personal one,
-and never include another student's information.
+The public contact form saves to **Contact messages** in `/admin/` (app
+`contact`). Filter by status `Pending`, open the message, reply by email and
+then mark it `Resolved` (single edit or the bulk action). Check the queue daily.
+Reply from the official support address, never from a personal one, and never
+include another student's information.
 
 ---
 
@@ -539,7 +540,7 @@ What the system sends:
 | Match approved | Both students | In-app + email (if enabled) | "Someone you secretly selected also selected you." |
 | Reveal chosen by one side | The other side | In-app | "Your mutual crush chose to reveal. Open to finish." |
 | Report / block | Nobody | None automatic | Admin acts manually through the report queue |
-| Contact form | `CONTACT_EMAIL` | Email | Name/email/message |
+| Contact form | Admin — Contact messages | Database | Name/email/message/topic/status |
 
 Non-negotiable rules:
 
@@ -594,7 +595,7 @@ The email/notification cannot be un-sent, so act quickly and consistently:
    `PotentialMatch` rows so the audit trail explains what happened. Do not wipe
    the original note.
 3. Record who approved it, when, and why it was wrong. Do not delete history.
-4. Contact the affected students using `CONTACT_EMAIL` with a short, factual
+4. Contact the affected students using the official support address with a short, factual
    apology. Never repeat private list details in the message.
 5. If the cause was a duplicate profile, fix the duplicate before the same pair
    can be proposed again.

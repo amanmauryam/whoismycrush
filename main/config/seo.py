@@ -15,14 +15,19 @@ def _site_url() -> str:
     return (getattr(settings, "SITE_URL", "") or "http://127.0.0.1:8000").rstrip("/")
 
 
+def _site_name() -> str:
+    return getattr(settings, "SITE_NAME", "WhoIsMyCrush")
+
+
 def organization() -> dict:
     base = _site_url()
     return {
         "@context": "https://schema.org",
         "@type": "Organization",
-        "name": "WhoIsMyCrush",
+        "@id": base + "/#organization",
+        "name": _site_name(),
         "url": base + "/",
-        "logo": base + "/static/img/og-default.svg",
+        "logo": base + "/static/img/og-default.png",
         "description": (
             "A privacy-first college crush platform. Add up to three secret "
             "crushes and discover a mutual match only after verification."
@@ -35,7 +40,8 @@ def website() -> dict:
     return {
         "@context": "https://schema.org",
         "@type": "WebSite",
-        "name": "WhoIsMyCrush",
+        "@id": base + "/#website",
+        "name": _site_name(),
         "url": base + "/",
         "potentialAction": {
             "@type": "SearchAction",

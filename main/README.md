@@ -70,7 +70,6 @@ guide. Notable switches:
 | `RATELIMIT_ENABLE` | `True` | Fixed-window throttling for sensitive actions |
 | `CACHE_BACKEND` | `locmem` | `redis` / `memcached` for shared counters in production |
 | `ANALYTICS_ENABLED` + `ANALYTICS_DOMAIN` | off | Cookie-less Plausible analytics |
-| `CONTACT_EMAIL` | from email | Inbox for the public contact form |
 | `MATCH_EMAILS_ENABLED` | `True` | Whether the "it's mutual" alert is emailed |
 
 Check the mail setup any time with:

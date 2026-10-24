@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "accounts",
     "campus",
     "blog",
+    "contact",
 ]
 
 MIDDLEWARE = [
@@ -330,9 +331,19 @@ EMAIL_TIMEOUT = env_int("EMAIL_TIMEOUT", 10)
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@whoismycrush.local")
-CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", DEFAULT_FROM_EMAIL)
 
 SITE_URL = os.environ.get("SITE_URL", "http://127.0.0.1:8000").rstrip("/")
+SITE_NAME = os.environ.get("SITE_NAME", "WhoIsMyCrush")
+SITE_AUTHOR = os.environ.get("SITE_AUTHOR", "WhoIsMyCrush")
+SITE_KEYWORDS = os.environ.get(
+    "SITE_KEYWORDS",
+    "college crush, secret crush, mutual crush, anonymous crush, campus dating, who likes me",
+)
+
+# Webmaster / Search Console verification. Leave a value empty to omit its tag.
+GOOGLE_SITE_VERIFICATION = os.environ.get("GOOGLE_SITE_VERIFICATION", "")
+BING_SITE_VERIFICATION = os.environ.get("BING_SITE_VERIFICATION", "")
+YANDEX_SITE_VERIFICATION = os.environ.get("YANDEX_SITE_VERIFICATION", "")
 
 # Privacy-friendly, cookie-less analytics. Off unless explicitly enabled and a
 # domain is set; no crush data is ever sent (see docs/privacy-and-matching.md).

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from django.conf import settings
 from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.utils.decorators import method_decorator
@@ -9,7 +8,6 @@ from django.views.generic import TemplateView
 from config import seo
 from config.content import FAQ_GROUPS, faq_pairs
 from config.forms import ContactForm
-from config.mail import send_mail
 from config.ratelimit import ratelimit
 
 HOME = ("Home", "/")
@@ -159,29 +157,13 @@ class ContactView(TemplateView):
     def post(self, request, *args, **kwargs):
         form = ContactForm(request.POST)
         if form.is_valid():
-            self._deliver(form.cleaned_data)
+            form.save()
             messages.success(
                 request, "Thanks — your message is with us. We'll reply by email."
             )
             return redirect("core:contact")
         messages.error(request, "Please check the form and try again.")
         return self.render_to_response(self.get_context_data(form=form))
-
-    def _deliver(self, data):
-        to = getattr(settings, "CONTACT_EMAIL", "") or settings.DEFAULT_FROM_EMAIL
-        body = (
-            f"Topic: {data['topic']}\n"
-            f"From: {data['name']} <{data['email']}>\n\n"
-            f"{data['message']}\n"
-        )
-        # Best-effort: a mail failure should not lose the user's submission or
-        # show them an error they cannot act on. It is still logged, so a broken
-        # mail server does not silently swallow every contact form message.
-        send_mail(
-            f"[WhoIsMyCrush] {data['topic']}",
-            body,
-            [to],
-        )
 
 
 def handler404(request, exception):

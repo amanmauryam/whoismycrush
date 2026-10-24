@@ -5,7 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}{{ page_title|default:"Who is your crush?" }}{% endblock %} · {{ SITE_NAME }}</title>
   <meta name="description" content="{% block meta_description %}{{ meta_description|default:"Secretly pick up to 3 people from your college. Nobody will know — unless they picked you too." }}{% endblock %}">
+  {% if SITE_KEYWORDS %}<meta name="keywords" content="{% block meta_keywords %}{{ meta_keywords|default:SITE_KEYWORDS }}{% endblock %}">{% endif %}
+  <meta name="author" content="{{ page_author|default:SITE_AUTHOR }}">
   {% block robots %}{% if can_index is False %}<meta name="robots" content="noindex,nofollow">{% else %}<meta name="robots" content="index,follow,max-image-preview:large">{% endif %}{% endblock %}
+  {% if GOOGLE_SITE_VERIFICATION %}<meta name="google-site-verification" content="{{ GOOGLE_SITE_VERIFICATION }}">{% endif %}
+  {% if BING_SITE_VERIFICATION %}<meta name="msvalidate.01" content="{{ BING_SITE_VERIFICATION }}">{% endif %}
+  {% if YANDEX_SITE_VERIFICATION %}<meta name="yandex-verification" content="{{ YANDEX_SITE_VERIFICATION }}">{% endif %}
   <link rel="canonical" href="{% block canonical %}{% if canonical_path|slice:':4' == 'http' %}{{ canonical_path }}{% else %}{{ SITE_URL }}{{ canonical_path|default:request.path }}{% endif %}{% endblock %}">
 
   <meta property="og:site_name" content="{{ SITE_NAME }}">

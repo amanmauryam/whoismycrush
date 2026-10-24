@@ -7,9 +7,14 @@ from . import seo
 
 def site(request):
     return {
-        "SITE_NAME": "WhoIsMyCrush",
+        "SITE_NAME": getattr(settings, "SITE_NAME", "WhoIsMyCrush"),
         "SITE_TAGLINE": "You might be someone's crush too.",
         "SITE_URL": settings.SITE_URL,
+        "SITE_AUTHOR": getattr(settings, "SITE_AUTHOR", "WhoIsMyCrush"),
+        "SITE_KEYWORDS": getattr(settings, "SITE_KEYWORDS", ""),
+        "GOOGLE_SITE_VERIFICATION": getattr(settings, "GOOGLE_SITE_VERIFICATION", ""),
+        "BING_SITE_VERIFICATION": getattr(settings, "BING_SITE_VERIFICATION", ""),
+        "YANDEX_SITE_VERIFICATION": getattr(settings, "YANDEX_SITE_VERIFICATION", ""),
         "email_verified": email_is_verified(getattr(request, "user", None)),
         "analytics_enabled": getattr(settings, "ANALYTICS_ENABLED", False),
         "analytics_domain": getattr(settings, "ANALYTICS_DOMAIN", ""),

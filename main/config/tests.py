@@ -13,6 +13,7 @@ from config.content import FAQ_GROUPS, faq_pairs
 from config.mail import send_mail
 from config.ratelimit import parse_rate, ratelimit
 from config.sanitize import sanitize_html
+from contact.models import ContactMessage
 
 from .forms import ContactForm
 
@@ -139,18 +140,25 @@ class ContactFormTests(TestCase):
         data.update(overrides)
         return data
 
-    def test_valid_submission_sends_mail(self):
+    def test_valid_submission_is_saved_as_pending(self):
         response = self.client.post(reverse("core:contact"), self._payload())
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("Hello there", mail.outbox[0].body)
+
+        message = ContactMessage.objects.get()
+        self.assertEqual(message.name, "Sam")
+        self.assertEqual(message.email, "sam@example.edu")
+        self.assertEqual(message.topic, ContactMessage.Topic.GENERAL)
+        self.assertEqual(message.message, "Hello there")
+        self.assertEqual(message.status, ContactMessage.Status.PENDING)
+        self.assertIsNone(message.resolved_at)
+        self.assertEqual(len(mail.outbox), 0)
 
     def test_honeypot_blocks_bots(self):
         response = self.client.post(
             reverse("core:contact"), self._payload(website="http://spam.example")
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(mail.outbox), 0)
+        self.assertFalse(ContactMessage.objects.exists())
         self.assertFalse(ContactForm(self._payload(website="x")).is_valid())
 
     def test_message_is_trimmed(self):

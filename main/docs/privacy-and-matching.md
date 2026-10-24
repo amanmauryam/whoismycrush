@@ -41,8 +41,8 @@ each one to where the code enforces it.
   of a roll number at reveal time.
 - `CrushEntry` — the details you type by hand, stored against internal ids.
 - `BlogPost` — public content with metadata.
-- Contact form — name/email/message, delivered to `CONTACT_EMAIL`; honeypot +
-  rate limited.
+- Contact form — name/email/topic/message, stored in the `ContactMessage`
+  table for staff triage (no email is sent); honeypot + rate limited.
 
 ## Never done
 
