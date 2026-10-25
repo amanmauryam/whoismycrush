@@ -206,19 +206,58 @@ def compare(entry: CrushEntry, student: StudentProfile) -> MatchVerdict:
 # ---------------------------------------------------------------------------
 
 
+def _sync_pending_proposal(
+    entry: CrushEntry, student: StudentProfile, verdict: MatchVerdict
+) -> PotentialMatch | None:
+    """Create or refresh one pending proposal, or drop it if it no longer fits.
+
+    Pending scores are intentionally recomputed on every add/edit so an admin
+    always sees the current confidence. Reviewed rows are never touched: an
+    approval or rejection is a human decision, not something a later edit may
+    silently undo.
+    """
+    qualified = verdict.eligible and verdict.confidence >= MIN_CONFIDENCE
+    match = PotentialMatch.objects.filter(
+        crush_entry=entry, registered_student=student
+    ).first()
+
+    if match is None:
+        if not qualified:
+            return None
+        return PotentialMatch.objects.create(
+            crush_entry=entry,
+            registered_student=student,
+            confidence_score=verdict.confidence,
+            match_reasons=", ".join(verdict.reasons)[:300],
+            status=PotentialMatch.Status.PENDING,
+        )
+
+    if match.status != PotentialMatch.Status.PENDING:
+        return None
+
+    if not qualified:
+        match.delete()
+        return None
+
+    match.confidence_score = verdict.confidence
+    match.match_reasons = ", ".join(verdict.reasons)[:300]
+    match.save(update_fields=["confidence_score", "match_reasons"])
+    return None
+
+
 @transaction.atomic
 def propose_for_entry(entry: CrushEntry) -> list[PotentialMatch]:
     """Find registered students matching ``entry`` and queue them for review.
 
-    Returns only the rows newly created; rows that already exist (in any
-    status) are left alone so re-running the matcher never resurrects a
-    rejected proposal.
+    Existing pending rows are refreshed in place, and rows that no longer fit
+    (because the entry was edited or blocked) are removed. Returns only rows
+    newly created.
     """
     if not entry.is_active or not entry.normalized_roll_number:
         return []
 
     author = entry.submitted_by
-    candidates = (
+    candidates = list(
         StudentProfile.objects.filter(
             college_id=entry.college_id,
             normalized_roll_number=entry.normalized_roll_number,
@@ -226,23 +265,47 @@ def propose_for_entry(entry: CrushEntry) -> list[PotentialMatch]:
         .exclude(pk=author.pk)
         .exclude(pk__in=_blocked_ids(author))
     )
+    candidate_ids = [student.pk for student in candidates]
 
     created: list[PotentialMatch] = []
     for student in candidates:
-        verdict = compare(entry, student)
-        if not verdict.eligible or verdict.confidence < MIN_CONFIDENCE:
-            continue
-        match, was_created = PotentialMatch.objects.get_or_create(
-            crush_entry=entry,
-            registered_student=student,
-            defaults={
-                "confidence_score": verdict.confidence,
-                "match_reasons": ", ".join(verdict.reasons)[:300],
-                "status": PotentialMatch.Status.PENDING,
-            },
+        new_match = _sync_pending_proposal(entry, student, compare(entry, student))
+        if new_match is not None:
+            created.append(new_match)
+
+    # An edited entry may now point somewhere else entirely.
+    PotentialMatch.objects.filter(
+        crush_entry=entry, status=PotentialMatch.Status.PENDING
+    ).exclude(registered_student_id__in=candidate_ids).delete()
+    return created
+
+
+@transaction.atomic
+def refresh_incoming_matches(student: StudentProfile) -> list[PotentialMatch]:
+    """Re-score every entry that points at ``student`` after a profile edit.
+
+    Also removes pending rows for entries that no longer describe this student
+    (for example after a roll number change).
+    """
+    incoming = list(
+        CrushEntry.objects.active()
+        .filter(
+            college_id=student.college_id,
+            normalized_roll_number=student.normalized_roll_number,
         )
-        if was_created:
-            created.append(match)
+        .exclude(submitted_by=student)
+    )
+    entry_ids = [entry.pk for entry in incoming]
+
+    created: list[PotentialMatch] = []
+    for entry in incoming:
+        new_match = _sync_pending_proposal(entry, student, compare(entry, student))
+        if new_match is not None:
+            created.append(new_match)
+
+    PotentialMatch.objects.filter(
+        registered_student=student, status=PotentialMatch.Status.PENDING
+    ).exclude(crush_entry_id__in=entry_ids).delete()
     return created
 
 
@@ -255,34 +318,13 @@ def match_entries_for(author: StudentProfile) -> list[PotentialMatch]:
 
 
 def match_new_student(student: StudentProfile) -> list[PotentialMatch]:
-    """Run when someone registers.
+    """Run when someone registers or edits their campus identity.
 
     Two directions matter (requirement 8):
-    entries that describe *this* new student, and this student's own entries
+    entries that describe *this* student, and this student's own entries
     that describe people who were already registered.
     """
-    created: list[PotentialMatch] = []
-
-    # Direction 1: someone already typed this student's details.
-    incoming = CrushEntry.objects.active().filter(
-        college_id=student.college_id,
-        normalized_roll_number=student.normalized_roll_number,
-    ).exclude(submitted_by=student)
-    for entry in incoming:
-        verdict = compare(entry, student)
-        if not verdict.eligible or verdict.confidence < MIN_CONFIDENCE:
-            continue
-        match, was_created = PotentialMatch.objects.get_or_create(
-            crush_entry=entry,
-            registered_student=student,
-            defaults={
-                "confidence_score": verdict.confidence,
-                "match_reasons": ", ".join(verdict.reasons)[:300],
-                "status": PotentialMatch.Status.PENDING,
-            },
-        )
-        if was_created:
-            created.append(match)
+    created = refresh_incoming_matches(student)
 
     # Direction 2: this student's own entries vs already-registered students.
     created.extend(match_entries_for(student))

@@ -32,7 +32,12 @@ from .forms import (
     next_free_priority,
     remaining_slots,
 )
-from .matching import match_new_student, pending_pairs, unpaired_pending
+from .matching import (
+    match_new_student,
+    pending_pairs,
+    refresh_incoming_matches,
+    unpaired_pending,
+)
 from .models import (
     MAX_CRUSHES,
     Block,
@@ -681,6 +686,7 @@ def campus_id(request):
         form = CampusIdForm(request.POST, instance=student)
         if form.is_valid():
             form.save()
+            refresh_incoming_matches(student)
             messages.success(request, "Campus ID updated.")
             return redirect("campus:campus_id")
     else:

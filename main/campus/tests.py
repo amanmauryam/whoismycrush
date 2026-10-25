@@ -215,6 +215,26 @@ class CampusIdEditTests(TestCase):
         self.me.refresh_from_db()
         self.assertTrue(self.me.is_verified)
 
+    def test_profile_edit_refreshes_incoming_confidence(self):
+        make_entry(self.other, self.me)
+        seal_secret(self.other)
+        proposal = PotentialMatch.objects.get(registered_student=self.me)
+        before = proposal.confidence_score
+
+        self.client.post(
+            reverse("campus:campus_id"), self.payload(full_name="Aman K. Kumar")
+        )
+        proposal.refresh_from_db()
+        self.assertLess(proposal.confidence_score, before)
+
+    def test_profile_edit_that_breaks_identity_drops_pending_proposal(self):
+        make_entry(self.other, self.me)
+        seal_secret(self.other)
+        self.assertEqual(PotentialMatch.objects.pending().count(), 1)
+
+        self.client.post(reverse("campus:campus_id"), self.payload(course="BBA"))
+        self.assertEqual(PotentialMatch.objects.pending().count(), 0)
+
 
 class MatchingGateTests(TestCase):
     def setUp(self):
@@ -323,6 +343,45 @@ class ProposalTests(TestCase):
         )
         self.assertRedirects(response, reverse("campus:secret"))
         self.assertEqual(len(pending_pairs()), 1)
+
+    def test_editing_an_entry_refreshes_pending_confidence(self):
+        entry = make_entry(self.a, self.b)
+        seal_secret(self.a)
+        proposal = PotentialMatch.objects.get(crush_entry=entry)
+        before = proposal.confidence_score
+
+        self.client.force_login(self.a.user)
+        self.client.post(
+            reverse("campus:edit_crush", args=[entry.pk]),
+            entry_payload("crush1", self.b, **{"crush1-full_name": "Priyaa"}),
+        )
+        proposal.refresh_from_db()
+        self.assertLess(proposal.confidence_score, before)
+
+    def test_editing_entry_to_another_student_replaces_the_proposal(self):
+        entry = make_entry(self.a, self.b)
+        seal_secret(self.a)
+        self.assertTrue(
+            PotentialMatch.objects.filter(
+                crush_entry=entry, registered_student=self.b
+            ).exists()
+        )
+
+        self.client.force_login(self.a.user)
+        self.client.post(
+            reverse("campus:edit_crush", args=[entry.pk]),
+            entry_payload("crush1", self.c),
+        )
+        self.assertFalse(
+            PotentialMatch.objects.filter(
+                crush_entry=entry, registered_student=self.b
+            ).exists()
+        )
+        self.assertTrue(
+            PotentialMatch.objects.filter(
+                crush_entry=entry, registered_student=self.c
+            ).exists()
+        )
 
     def test_priority_range_is_enforced(self):
         entry = CrushEntry(
