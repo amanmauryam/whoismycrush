@@ -358,19 +358,77 @@ class CrushEntryForm(forms.ModelForm):
 
 
 class CampusIdForm(forms.ModelForm):
-    """Edit your Campus ID. Roll number stays locked once verified."""
+    """Edit your Campus ID. Changing a verified roll number needs re-verification."""
 
     class Meta:
         model = StudentProfile
-        fields = ["full_name", "nickname", "course", "year", "section", "department", "gender"]
-        labels = {"nickname": "Profile nickname (optional)", "department": "Department (optional)"}
+        fields = [
+            "full_name",
+            "roll_number",
+            "nickname",
+            "course",
+            "year",
+            "section",
+            "department",
+            "gender",
+        ]
+        labels = {
+            "nickname": "Profile nickname (optional)",
+            "department": "Department (optional)",
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget.attrs["class"] = "input"
+        self.fields["roll_number"].widget.attrs.update(
+            {"autocapitalize": "characters", "spellcheck": "false"}
+        )
+        self.fields["roll_number"].help_text = (
+            "Only the last 3 digits are ever shown to others."
+        )
         self.fields["nickname"].required = False
         self.fields["department"].required = False
+        self._original_normalized_roll = normalize_roll_number(
+            self.instance.roll_number
+        )
+
+    def clean_roll_number(self):
+        roll = (self.cleaned_data.get("roll_number") or "").strip().upper()
+        if not normalize_roll_number(roll):
+            raise ValidationError("Enter the roll number printed on your ID card.")
+        return roll
+
+    def clean(self):
+        cleaned = super().clean()
+        roll = cleaned.get("roll_number")
+        if roll and self.instance.college_id:
+            clash = (
+                StudentProfile.objects.filter(
+                    college_id=self.instance.college_id,
+                    normalized_roll_number=normalize_roll_number(roll),
+                )
+                .exclude(pk=self.instance.pk)
+                .exists()
+            )
+            if clash:
+                self.add_error(
+                    "roll_number",
+                    "That roll number is already registered at this campus. "
+                    "Only one campus identity per student is allowed.",
+                )
+        return cleaned
+
+    def save(self, commit=True):
+        profile = super().save(commit=False)
+        roll_changed = (
+            normalize_roll_number(profile.roll_number) != self._original_normalized_roll
+        )
+        if roll_changed and self.instance.is_verified:
+            profile.is_verified = False
+        if commit:
+            profile.save()
+        return profile
 
 
 class PotentialMatchNotesForm(forms.Form):

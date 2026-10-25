@@ -154,6 +154,68 @@ class CrushEntryFormTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
 
 
+class CampusIdEditTests(TestCase):
+    def setUp(self):
+        self.college = College.objects.create(name="ABC College")
+        self.me = make_student(self.college, "23BCA101", "Aman")
+        self.other = make_student(self.college, "23BCA102", "Priya")
+        self.client.force_login(self.me.user)
+
+    def payload(self, **overrides):
+        data = {
+            "full_name": self.me.full_name,
+            "roll_number": self.me.roll_number,
+            "nickname": "",
+            "course": self.me.course,
+            "year": self.me.year,
+            "section": self.me.section,
+            "department": "",
+            "gender": self.me.gender,
+        }
+        data.update(overrides)
+        return data
+
+    def test_roll_number_can_be_edited_and_is_normalized(self):
+        response = self.client.post(
+            reverse("campus:campus_id"),
+            self.payload(roll_number=" 23bca-105 "),
+        )
+        self.assertRedirects(response, reverse("campus:campus_id"))
+        self.me.refresh_from_db()
+        self.assertEqual(self.me.roll_number, "23BCA-105")
+        self.assertEqual(self.me.normalized_roll_number, "23BCA105")
+
+    def test_roll_number_cannot_clash_with_another_student(self):
+        response = self.client.post(
+            reverse("campus:campus_id"),
+            self.payload(roll_number=self.other.roll_number),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "already registered at this campus")
+        self.me.refresh_from_db()
+        self.assertEqual(self.me.roll_number, "23BCA101")
+
+    def test_changing_roll_number_clears_verification(self):
+        self.me.is_verified = True
+        self.me.save(update_fields=["is_verified"])
+
+        self.client.post(
+            reverse("campus:campus_id"), self.payload(roll_number="23BCA105")
+        )
+        self.me.refresh_from_db()
+        self.assertFalse(self.me.is_verified)
+
+    def test_editing_other_fields_keeps_verification(self):
+        self.me.is_verified = True
+        self.me.save(update_fields=["is_verified"])
+
+        self.client.post(
+            reverse("campus:campus_id"), self.payload(full_name="Aman K. Kumar")
+        )
+        self.me.refresh_from_db()
+        self.assertTrue(self.me.is_verified)
+
+
 class MatchingGateTests(TestCase):
     def setUp(self):
         self.c1 = College.objects.create(name="ABC College")
