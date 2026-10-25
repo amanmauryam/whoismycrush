@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>{% block title %}{{ page_title|default:"Who is your crush?" }}{% endblock %} · {{ SITE_NAME }}</title>
+  <title>{% block title %}{{ page_title|default:"Who is my crush?" }}{% endblock %} · {{ SITE_NAME }}</title>
   <meta name="description" content="{% block meta_description %}{{ meta_description|default:"Secretly pick up to 3 people from your college. Nobody will know — unless they picked you too." }}{% endblock %}">
   {% if SITE_KEYWORDS %}<meta name="keywords" content="{% block meta_keywords %}{{ meta_keywords|default:SITE_KEYWORDS }}{% endblock %}">{% endif %}
   <meta name="author" content="{{ page_author|default:SITE_AUTHOR }}">
@@ -15,14 +15,14 @@
 
   <meta property="og:site_name" content="{{ SITE_NAME }}">
   <meta property="og:type" content="{% block og_type %}{{ og_type|default:"website" }}{% endblock %}">
-  <meta property="og:title" content="{{ page_title|default:'Who is your crush?' }} · {{ SITE_NAME }}">
+  <meta property="og:title" content="{{ page_title|default:'Who is my crush?' }} · {{ SITE_NAME }}">
   <meta property="og:description" content="{{ meta_description|default:'Secretly pick up to 3 people from your college. We only tell you when it is mutual.' }}">
   <meta property="og:url" content="{% if canonical_path|slice:':4' == 'http' %}{{ canonical_path }}{% else %}{{ SITE_URL }}{{ canonical_path|default:request.path }}{% endif %}">
   <meta property="og:image" content="{% block og_image %}{{ SITE_URL }}{% if og_image_path %}{{ og_image_path }}{% else %}{% static 'img/og-default.png' %}{% endif %}{% endblock %}">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="{{ page_title|default:'Who is your crush?' }} · {{ SITE_NAME }}">
+  <meta name="twitter:title" content="{{ page_title|default:'Who is my crush?' }} · {{ SITE_NAME }}">
   <meta name="twitter:description" content="{{ meta_description|default:'Secretly pick up to 3 people from your college. We only tell you when it is mutual.' }}">
   <meta name="twitter:image" content="{% block twitter_image %}{{ SITE_URL }}{% if og_image_path %}{{ og_image_path }}{% else %}{% static 'img/og-default.png' %}{% endif %}{% endblock %}">
   <meta name="theme-color" content="#F7F6F1">

@@ -37,7 +37,7 @@ core_patterns = (
 )
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    path("802134admin/", admin.site.urls),
     path("", include("campus.urls")),
     path("", include("accounts.urls")),
     path("pro-tips/", include("blog.urls")),

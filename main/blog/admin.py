@@ -2,7 +2,18 @@ from django.contrib import admin
 from django.db.models import Count
 from django.utils import timezone
 
-from .models import Category, Post
+from .models import Category, Post, PostView
+
+
+class PostViewInline(admin.TabularInline):
+    model = PostView
+    extra = 0
+    readonly_fields = ("ip_address", "created_at")
+    can_delete = False
+    ordering = ["-created_at"]
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Category)
@@ -30,6 +41,7 @@ class PostAdmin(admin.ModelAdmin):
         "is_published",
         "published_at",
         "author_name",
+        "total_unique_views_display",
         "updated_at",
     )
     list_filter = ("is_published", "is_featured", "category", "author_name")
@@ -42,6 +54,19 @@ class PostAdmin(admin.ModelAdmin):
     list_per_page = 25
     save_on_top = True
     actions = ("publish_posts", "unpublish_posts", "feature_posts", "unfeature_posts")
+    inlines = [PostViewInline]
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("category")
+            .annotate(total_views=Count("views", distinct=True))
+        )
+
+    @admin.display(description="Unique Views", ordering="total_views")
+    def total_unique_views_display(self, obj):
+        return getattr(obj, "total_views", obj.views.count())
 
     fieldsets = (
         (

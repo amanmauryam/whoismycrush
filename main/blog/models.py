@@ -20,6 +20,22 @@ from .validators import validate_cover_image
 _WORDS = re.compile(r"\S+")
 
 
+def get_client_ip(request):
+    """Extract the real user IP address handling reverse proxies/load balancers."""
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded:
+        # X-Forwarded-For can contain a comma-separated list of IPs
+        ip = forwarded.split(",")[0].strip()
+        if ip:
+            return ip
+    real_ip = request.META.get("HTTP_X_REAL_IP", "")
+    if real_ip:
+        ip = real_ip.strip()
+        if ip:
+            return ip
+    return request.META.get("REMOTE_ADDR", "") or "unknown"
+
+
 class Category(models.Model):
     """An editorial shelf for Pro Tips (privacy, tutorials, troubleshooting…)."""
 
@@ -258,3 +274,34 @@ class Post(models.Model):
         if self.featured_image:
             return self.featured_image.url
         return "/static/img/og-default.png"
+
+    @property
+    def total_unique_views(self) -> int:
+        """Get total unique views count efficiently."""
+        return self.views.count()
+
+
+class PostView(models.Model):
+    """Track unique blog post views per IP address."""
+
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="views")
+    ip_address = models.GenericIPAddressField(db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("post", "ip_address")]
+        indexes = [
+            models.Index(fields=["post", "ip_address"]),
+            models.Index(fields=["ip_address"]),
+            models.Index(fields=["-created_at"]),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.post.title} - {self.ip_address}"
+
+
+# Aliases for flexibility with different naming conventions
+Blog = Post
+BlogView = PostView
+View = PostView

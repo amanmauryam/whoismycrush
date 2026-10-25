@@ -4,6 +4,7 @@ from pathlib import Path
 
 from django.core.exceptions import ValidationError
 from django.core.files.storage import default_storage
+from django.db import IntegrityError
 from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -15,7 +16,7 @@ from django.views.generic import DetailView, ListView
 from config import seo
 from config.ratelimit import ratelimit
 
-from .models import Category, Post
+from .models import Category, Post, PostView, get_client_ip
 from .utils import add_heading_ids, extract_toc
 from .validators import validate_cover_image
 
@@ -168,6 +169,26 @@ class PostDetailView(DetailView):
 
     def get_queryset(self):
         return Post.published.select_related("category")
+
+    def get(self, request, *args, **kwargs):
+        response = super().get(request, *args, **kwargs)
+        self._track_unique_view()
+        return response
+
+    def _track_unique_view(self):
+        """Track unique view based on user IP address."""
+        try:
+            post = self.object
+            ip_address = get_client_ip(self.request)
+            if ip_address and ip_address != "unknown":
+                try:
+                    PostView.objects.get_or_create(post=post, ip_address=ip_address)
+                except IntegrityError:
+                    # Race condition protection - if already exists
+                    pass
+        except Exception:
+            # Don't let view tracking break the page
+            pass
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
