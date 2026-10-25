@@ -293,6 +293,37 @@ class ProposalTests(TestCase):
         self.assertEqual(seal_secret(self.a), 0)
         self.assertEqual(PotentialMatch.objects.count(), 1)
 
+    def test_adding_reciprocal_entries_creates_a_pair_immediately(self):
+        self.client.force_login(self.a.user)
+        self.client.post(
+            reverse("campus:add_crush_slot", args=[1]),
+            entry_payload("crush1", self.b),
+        )
+        self.assertEqual(PotentialMatch.objects.pending().count(), 1)
+        self.assertEqual(pending_pairs(), [])
+
+        self.client.force_login(self.b.user)
+        self.client.post(
+            reverse("campus:add_crush_slot", args=[1]),
+            entry_payload("crush1", self.a),
+        )
+        self.assertEqual(PotentialMatch.objects.pending().count(), 2)
+        self.assertEqual(len(pending_pairs()), 1)
+        self.assertEqual(Notification.objects.count(), 0)
+
+    def test_editing_an_entry_re_runs_matching(self):
+        entry = make_entry(self.a, self.b)
+        make_entry(self.b, self.a)
+        self.assertEqual(PotentialMatch.objects.count(), 0)
+
+        self.client.force_login(self.a.user)
+        response = self.client.post(
+            reverse("campus:edit_crush", args=[entry.pk]),
+            entry_payload("crush1", self.b),
+        )
+        self.assertRedirects(response, reverse("campus:secret"))
+        self.assertEqual(len(pending_pairs()), 1)
+
     def test_priority_range_is_enforced(self):
         entry = CrushEntry(
             submitted_by=self.a,

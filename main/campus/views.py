@@ -366,7 +366,11 @@ def secret_desk(request):
 @require_POST
 @ratelimit(key="user", rate="30/h")
 def add_crush(request, slot=None):
-    """Save one slot from the typed form. The crush need not be registered."""
+    """Save one slot from the typed form. The crush need not be registered.
+
+    Matching runs immediately so a reciprocal entry never has to wait for a
+    later seal (it only creates pending proposals -- nobody is notified).
+    """
 
     student = _student(request.user)
     if slot is None:
@@ -389,6 +393,7 @@ def add_crush(request, slot=None):
         return _secret_with_errors(request, student, slot, form)
 
     form.save()
+    match_new_student(student)
     messages.success(request, f"Crush #{slot} saved. Still completely secret.")
     return redirect("campus:secret")
 
@@ -397,7 +402,11 @@ def add_crush(request, slot=None):
 @require_POST
 @ratelimit(key="user", rate="60/h")
 def edit_crush(request, pk):
-    """Update a saved slot in place, keeping its priority."""
+    """Update a saved slot in place, keeping its priority.
+
+    Re-runs matching for both directions so an edited entry is never left with
+    stale or missing proposals.
+    """
 
     student = _student(request.user)
     entry = get_object_or_404(
@@ -415,6 +424,7 @@ def edit_crush(request, pk):
         return _secret_with_errors(request, student, entry.priority, form, entry=entry)
 
     form.save()
+    match_new_student(student)
     messages.success(request, f"Crush #{entry.priority} updated.")
     return redirect("campus:secret")
 
