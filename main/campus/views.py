@@ -117,7 +117,7 @@ class LandingView(TemplateView):
         context = super().get_context_data(**kwargs)
         context.update(
             {
-                "page_title": "Who is your crush?",
+                "page_title": "Who is my crush?",
                 "meta_description": (
                     "Secretly pick up to 3 people from your college. "
                     "Nobody will know unless they picked you too."
