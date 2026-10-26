@@ -288,7 +288,12 @@ class CrushEntryForm(forms.ModelForm):
             field.widget.attrs.setdefault("class", "input")
 
         self.fields["full_name"].label = "Full name"
-        self.fields["roll_number"].label = "Roll number"
+        self.fields["roll_number"].label = "Roll number (optional)"
+        self.fields["roll_number"].help_text = (
+            "Leave this blank if you are not sure. We will keep checking safely "
+            "as new students join; nothing is revealed unless a match is confirmed."
+        )
+        self.fields["roll_number"].required = False
         self.fields["department"].label = "Department (optional)"
         self.fields["nickname"].label = "Known nickname (optional)"
 
@@ -304,10 +309,9 @@ class CrushEntryForm(forms.ModelForm):
         return name
 
     def clean_roll_number(self):
-        roll = (self.cleaned_data.get("roll_number") or "").strip().upper()
-        if not normalize_roll_number(roll):
-            raise ValidationError("Enter their roll number as far as you know it.")
-        return roll
+        # Roll numbers are optional evidence, not the identity itself. An
+        # unknown or mistyped roll must never discard the rest of the entry.
+        return (self.cleaned_data.get("roll_number") or "").strip().upper()
 
     def clean_section(self):
         return " ".join((self.cleaned_data.get("section") or "").split()).upper()

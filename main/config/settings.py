@@ -24,6 +24,13 @@ def env_int(name, default):
         return default
 
 
+def env_float(name, default):
+    try:
+        return float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
 SECRET_KEY = os.environ.get("SECRET_KEY", "insecure-dev-key-change-me")
 DEBUG = env_bool("DEBUG", True)
 ALLOWED_HOSTS = [
@@ -352,6 +359,22 @@ ANALYTICS_DOMAIN = os.environ.get("ANALYTICS_DOMAIN", "")
 
 MATCH_EMAILS_ENABLED = env_bool("MATCH_EMAILS_ENABLED", True)
 MINIMUM_AGE = env_int("MINIMUM_AGE", 18)
+
+# Identity resolution is deliberately conservative. Auto-binding always needs
+# an exact campus + roll match, a close name, and no course/year/section
+# conflicts. Ambiguous entries go to the separate identity review desk.
+IDENTITY_AUTO_RESOLVE_ENABLED = env_bool("IDENTITY_AUTO_RESOLVE_ENABLED", True)
+IDENTITY_AUTO_RESOLVE_MIN_NAME_SIMILARITY = env_float(
+    "IDENTITY_AUTO_RESOLVE_MIN_NAME_SIMILARITY", 0.88
+)
+IDENTITY_NAME_CANDIDATE_MIN = env_float("IDENTITY_NAME_CANDIDATE_MIN", 0.70)
+IDENTITY_CANDIDATE_MIN_SCORE = env_float("IDENTITY_CANDIDATE_MIN_SCORE", 50.0)
+IDENTITY_MAX_CANDIDATES = env_int("IDENTITY_MAX_CANDIDATES", 10)
+IDENTITY_FUZZY_SCAN_LIMIT = env_int("IDENTITY_FUZZY_SCAN_LIMIT", 500)
+IDENTITY_REGISTRATION_SCAN_LIMIT = env_int("IDENTITY_REGISTRATION_SCAN_LIMIT", 500)
+IDENTITY_REQUIRE_STUDENT_VERIFICATION_FOR_AUTO = env_bool(
+    "IDENTITY_REQUIRE_STUDENT_VERIFICATION_FOR_AUTO", False
+)
 
 # Email verification is on (links are emailed) but not blocking by default.
 # Set EMAIL_VERIFICATION_REQUIRED=True to force confirmation before the rest of

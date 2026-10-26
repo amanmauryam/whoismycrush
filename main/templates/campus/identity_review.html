@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:pending_matches' %}">Pending crush matches</a>
+    <span>→</span>
+    <span>Identity review</span>
+  </div>
+
+  <div class="page-head">
+    <h1>Identity review</h1>
+    <p>
+      These entries do not yet have a safely verified crush identity. Candidate
+      details stay on this staff desk and are never shown to students.
+    </p>
+  </div>
+
+  <div class="notice-box">
+    Confirm only when the typed name, roll number and campus all point to the
+    same person. A missing or conflicting roll is a reason to review, not a
+    reason to guess.
+  </div>
+
+  {% if entries %}
+    <div class="paper" style="margin-top:20px">
+      <table class="review-table">
+        <thead>
+          <tr>
+            <th scope="col">Entry</th>
+            <th scope="col">Campus</th>
+            <th scope="col">Status</th>
+            <th scope="col">Candidates</th>
+            <th scope="col"><span class="sr-only">Review</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in entries %}
+            <tr>
+              <td>
+                <strong>{{ entry.full_name }}</strong>
+                <span class="muted">typed by {{ entry.submitted_by.full_name }}</span>
+                <div class="muted small">
+                  Roll: {{ entry.roll_number|default:"not given" }}
+                  · {{ entry.get_course_display }} · Year {{ entry.year }}
+                </div>
+              </td>
+              <td>{{ entry.college.name }}</td>
+              <td><span class="stamp">{{ entry.get_identity_status_display }}</span></td>
+              <td>
+                {% for candidate in entry.review_candidates %}
+                  <div>
+                    {{ candidate.candidate.full_name }}
+                    <span class="muted">
+                      {% if candidate.confidence_score %}
+                        · {{ candidate.confidence_score|floatformat:0 }}%
+                      {% endif %}
+                    </span>
+                  </div>
+                {% empty %}
+                  <span class="muted">—</span>
+                {% endfor %}
+              </td>
+              <td>
+                <a class="btn btn-sm" href="{% url 'campus:identity_review_detail' entry.pk %}">
+                  Review
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <span class="doodle" aria-hidden="true">✓</span>
+      <h2>All clear</h2>
+      <p class="muted">No unresolved crush identities need review right now.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

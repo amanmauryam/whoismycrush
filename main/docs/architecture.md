@@ -16,16 +16,25 @@ exported through `TEMPLATES["OPTIONS"]["libraries"]`.
 
 - `College` — a campus/community. Crushes never cross this boundary. Has a
   public `slug` used by the shareable `/college/<slug>/` and `/join/<slug>/`
-  links.
-- `StudentProfile` — the private campus identity (campus + roll number is the
-  identity gate). One per user. `normalized_roll_number` is the canonical key
-  inside a campus.
-- `CrushEntry` — a hand-typed crush. Points at internal ids and a normalized
-  roll number; **never** at another student row, so a crush doesn't need an
-  account and can't be a lookup.
-- `PotentialMatch` — a reciprocal pair queued for review. Approval creates a
-  `MutualMatch`; only that step notifies anyone.
+  links, plus a normalized name for duplicate detection.
+- `StudentProfile` — the private campus identity. One per user. Registration
+  still requires a roll number; `normalized_roll_number` is the canonical key
+  inside a campus and `normalized_name` supports identity matching.
+- `CrushEntry` — a hand-typed crush. The typed name/roll/course are preserved
+  exactly. A missing roll is allowed. `resolved_student` is an optional,
+  verified internal link to a `StudentProfile`; it is `NULL` until identity
+  resolution is confident. The entry never exposes that link to students.
+- `IdentityCandidate` — explainable, staff-only evidence for a possible
+  identity link. Rows are sticky: rejected/deferred candidates cannot be
+  auto-bound later.
+- `IdentityResolutionAudit` — append-only decisions (`auto_resolved`,
+  `confirmed`, `rejected`, `deferred`, `invalidated`, `unresolvable`,
+  `reopened`) with ids only, never typed names or rolls.
+- `PotentialMatch` — a reciprocal pair queued for review. Approval requires both
+  entries to be identity-resolved and creates a `MutualMatch`; only that step
+  notifies anyone.
 - `MutualMatch` — a confirmed pair. `reveal` is opt-in on **both** sides.
+  `notified_at` is claimed atomically so a pair is announced at most once.
 - `Notification` — deliberately vague messages ("It's mutual", "They chose to
   reveal", roster events for reports/blocks).
 - `Block`, `Report` — moderation. Blocking retires matching entries and
@@ -42,18 +51,30 @@ exported through `TEMPLATES["OPTIONS"]["libraries"]`.
    `/join/<slug>/` link.
 3. **Identity** → full name / roll / course / year / section (18+ enforced).
 4. **Secret desk** → up to 3 active hand-typed entries (slots by priority).
-5. **Seal** → reciprocal pairs become *pending proposals*; nobody is notified.
-6. **Review** → a verifier approves only genuinely matching pairs; confidence
+5. **Resolve identity** → a crush entry gains a verified internal link only
+   when campus + roll are exact, the name is close, and course/year/section do
+   not conflict. Missing or conflicting evidence goes to human review.
+6. **Seal** → reciprocal verified pairs become *pending proposals*; nobody is
+   notified.
+7. **Review** → a verifier approves only genuinely matching pairs; confidence
    is advisory, nothing auto-approves.
-7. **Notify** → both sides get one quiet "it's mutual" alert.
-8. **Reveal** → names appear only when both sides choose it; either side can
+8. **Notify** → both sides get one quiet "it's mutual" alert.
+9. **Reveal** → names appear only when both sides choose it; either side can
    stay anonymous or close the match.
 
-## The verification desk
+## The review desks
 
-Uses the dedicated `campus.verify_potentialmatch` permission, so a moderator
-can be granted exactly the reviewing job and nothing else. `reconcile` is a
-staff-only maintenance sweep that re-runs the matcher.
+There are two separate least-privilege queues:
+
+- `/staff/identities/` uses `campus.review_identitycandidate` to resolve
+  ambiguous links before matching. Candidate details are staff-only and never
+  trigger a student notification.
+- `/staff/matches/` uses `campus.verify_potentialmatch` to approve reciprocal
+  pairs. Approval re-checks that both entries are still resolved to the two
+  accounts and that no block or account deactivation exists.
+
+`reconcile` is a staff-only maintenance sweep that re-runs identity resolution
+and the matcher.
 
 ## Rate limiting
 

@@ -4,6 +4,7 @@ from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
@@ -44,11 +45,20 @@ from .models import (
     College,
     CollegeInvite,
     CrushEntry,
+    IdentityCandidate,
     MutualMatch,
     Notification,
     PotentialMatch,
     Report,
     StudentProfile,
+)
+from .identity_resolution import (
+    confirm_candidate,
+    defer_candidate,
+    mark_unresolvable,
+    reject_candidate,
+    reopen_entry,
+    retire_entry,
 )
 from .services import (
     ApprovalError,
@@ -104,6 +114,24 @@ def verifier_required(view):
         )
         if not allowed:
             messages.error(request, "You are not allowed to review matches.")
+            return redirect("campus:dashboard")
+        return view(request, *args, **kwargs)
+
+    return wrapper
+
+
+def identity_reviewer_required(view):
+    """Separate least-privilege gate for ambiguous identity review."""
+
+    @login_required
+    @wraps(view)
+    def wrapper(request, *args, **kwargs):
+        user = request.user
+        allowed = user.is_superuser or (
+            user.is_staff and user.has_perm("campus.review_identitycandidate")
+        )
+        if not allowed:
+            messages.error(request, "You are not allowed to review identities.")
             return redirect("campus:dashboard")
         return view(request, *args, **kwargs)
 
@@ -370,6 +398,7 @@ def secret_desk(request):
 @student_required
 @require_POST
 @ratelimit(key="user", rate="30/h")
+@transaction.atomic
 def add_crush(request, slot=None):
     """Save one slot from the typed form. The crush need not be registered.
 
@@ -406,6 +435,7 @@ def add_crush(request, slot=None):
 @student_required
 @require_POST
 @ratelimit(key="user", rate="60/h")
+@transaction.atomic
 def edit_crush(request, pk):
     """Update a saved slot in place, keeping its priority.
 
@@ -446,6 +476,7 @@ def remove_crush(request, pk):
     slot = entry.priority
     entry.is_active = False
     entry.save(update_fields=["is_active"])
+    retire_entry(entry)
     messages.success(request, f"Crush #{slot} removed.")
     return redirect("campus:secret")
 
@@ -907,11 +938,12 @@ def block_student(request, pk):
         # blocker wrote that happens to describe the blocked person, and
         # killing pending proposals in both directions (requirements 17/18).
         blocked_roll = blocked.normalized_roll_number
-        CrushEntry.objects.filter(
-            submitted_by=student,
-            college_id=blocked.college_id,
-            normalized_roll_number=blocked_roll,
-            is_active=True,
+        CrushEntry.objects.filter(submitted_by=student, is_active=True).filter(
+            Q(resolved_student=blocked)
+            | Q(
+                college_id=blocked.college_id,
+                normalized_roll_number=blocked_roll,
+            )
         ).update(is_active=False)
         PotentialMatch.objects.filter(
             Q(crush_entry__submitted_by=student, registered_student=blocked)
@@ -970,6 +1002,119 @@ def pending_matches(request):
             "canonical_path": "/staff/matches/",
         },
     )
+
+
+@identity_reviewer_required
+def identity_review(request):
+    """Queue for entries whose crush identity is missing or ambiguous."""
+
+    entries = list(
+        CrushEntry.objects.active()
+        .filter(
+            identity_status__in=[
+                CrushEntry.ResolutionStatus.PENDING,
+                CrushEntry.ResolutionStatus.CANDIDATE_FOUND,
+                CrushEntry.ResolutionStatus.NEEDS_REVIEW,
+                CrushEntry.ResolutionStatus.UNRESOLVABLE,
+            ]
+        )
+        .select_related("college", "submitted_by", "resolved_student")
+        .order_by("identity_status", "-created_at")
+    )
+    candidates = (
+        IdentityCandidate.objects.filter(
+            crush_entry_id__in=[entry.pk for entry in entries],
+            status__in=[
+                IdentityCandidate.Status.CANDIDATE,
+                IdentityCandidate.Status.NEEDS_REVIEW,
+                IdentityCandidate.Status.DEFERRED,
+            ],
+        )
+        .select_related("candidate")
+        .order_by("-confidence_score", "pk")
+    )
+    grouped = {}
+    for candidate in candidates:
+        grouped.setdefault(candidate.crush_entry_id, []).append(candidate)
+    for entry in entries:
+        entry.review_candidates = grouped.get(entry.pk, [])
+
+    return render(
+        request,
+        "campus/identity_review.html",
+        {
+            "entries": entries,
+            "entry_count": len(entries),
+            "page_title": "Identity review",
+            "canonical_path": "/staff/identities/",
+        },
+    )
+
+
+@identity_reviewer_required
+def identity_review_detail(request, pk):
+    entry = get_object_or_404(
+        CrushEntry.objects.select_related(
+            "college", "submitted_by", "resolved_student"
+        ),
+        pk=pk,
+    )
+    return render(
+        request,
+        "campus/identity_review_detail.html",
+        {
+            "entry": entry,
+            "candidates": entry.identity_candidates.select_related(
+                "candidate", "reviewed_by"
+            ).order_by("-confidence_score", "pk"),
+            "audit": entry.resolution_audit.select_related(
+                "actor", "candidate"
+            )[:50],
+            "page_title": f"Identity review #{entry.pk}",
+            "canonical_path": f"/staff/identities/{entry.pk}/",
+        },
+    )
+
+
+@identity_reviewer_required
+@require_POST
+def identity_candidate_action(request, pk, action):
+    candidate = get_object_or_404(
+        IdentityCandidate.objects.select_related("crush_entry"), pk=pk
+    )
+    actions = {
+        "confirm": confirm_candidate,
+        "reject": reject_candidate,
+        "defer": defer_candidate,
+    }
+    handler = actions.get(action)
+    if handler is None:
+        return redirect("campus:identity_review")
+    notes = request.POST.get("notes", "")[:300]
+    try:
+        handler(candidate, request.user, notes=notes)
+    except (ValueError, ValidationError) as exc:
+        messages.error(request, " ".join(exc.messages) if hasattr(exc, "messages") else str(exc))
+    else:
+        labels = {"confirm": "confirmed", "reject": "rejected", "defer": "deferred"}
+        messages.success(request, f"Identity candidate {labels[action]} safely.")
+    return redirect("campus:identity_review_detail", pk=candidate.crush_entry_id)
+
+
+@identity_reviewer_required
+@require_POST
+def identity_entry_action(request, pk, action):
+    entry = get_object_or_404(CrushEntry.objects.active(), pk=pk)
+    notes = request.POST.get("notes", "")[:300]
+    if action == "unresolvable":
+        mark_unresolvable(entry, request.user, notes=notes)
+        messages.success(request, "Entry marked unresolvable. It stays private.")
+    elif action == "reopen":
+        reopen_entry(entry, request.user, notes=notes)
+        messages.success(request, "Identity resolution re-run with safe thresholds.")
+    else:
+        messages.error(request, "Unknown identity action.")
+    return redirect("campus:identity_review_detail", pk=entry.pk)
 
 
 @verifier_required

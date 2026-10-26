@@ -5,6 +5,8 @@ from .models import (
     College,
     CollegeInvite,
     CrushEntry,
+    IdentityCandidate,
+    IdentityResolutionAudit,
     MutualMatch,
     Notification,
     PotentialMatch,
@@ -45,6 +47,12 @@ class StudentProfileAdmin(admin.ModelAdmin):
     list_editable = ("is_verified",)
     autocomplete_fields = ("college",)
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from .matching import match_new_student
+
+        match_new_student(obj)
+
 
 @admin.register(CrushEntry)
 class CrushEntryAdmin(admin.ModelAdmin):
@@ -58,19 +66,59 @@ class CrushEntryAdmin(admin.ModelAdmin):
         "course",
         "year",
         "priority",
+        "identity_status",
+        "resolved_student",
         "submitted_by",
         "is_active",
         "created_at",
     )
-    list_filter = ("is_active", "priority", "college", "course", "year")
+    list_filter = ("is_active", "identity_status", "priority", "college", "course", "year")
     search_fields = (
         "full_name",
+        "normalized_name",
         "roll_number",
         "normalized_roll_number",
         "submitted_by__full_name",
     )
-    autocomplete_fields = ("college", "submitted_by")
-    readonly_fields = ("normalized_roll_number", "created_at")
+    autocomplete_fields = ("college", "submitted_by", "resolved_student")
+    readonly_fields = (
+        "normalized_name",
+        "normalized_roll_number",
+        "identity_status",
+        "resolved_student",
+        "resolved_at",
+        "resolution_confidence",
+        "resolution_method",
+        "resolution_notes",
+        "created_at",
+    )
+    actions = ["mark_unresolvable", "reopen_identity"]
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from .matching import propose_for_entry
+
+        propose_for_entry(obj)
+
+    @admin.action(description="Mark identity unresolvable (keeps original entry)")
+    def mark_unresolvable(self, request, queryset):
+        from .identity_resolution import mark_unresolvable
+
+        count = 0
+        for entry in queryset.filter(is_active=True):
+            mark_unresolvable(entry, request.user, notes="Marked from Django admin.")
+            count += 1
+        self.message_user(request, f"{count} entr(y/ies) marked unresolvable.")
+
+    @admin.action(description="Reopen identity resolution")
+    def reopen_identity(self, request, queryset):
+        from .identity_resolution import reopen_entry
+
+        count = 0
+        for entry in queryset.filter(is_active=True):
+            reopen_entry(entry, request.user, notes="Reopened from Django admin.")
+            count += 1
+        self.message_user(request, f"{count} entr(y/ies) reopened for safe matching.")
 
 
 @admin.register(MutualMatch)
@@ -82,11 +130,13 @@ class MutualMatchAdmin(admin.ModelAdmin):
         "status",
         "user_a_consented",
         "user_b_consented",
+        "notified_at",
         "created_at",
     )
     list_filter = ("status",)
     search_fields = ("user_a__full_name", "user_b__full_name")
     autocomplete_fields = ("user_a", "user_b")
+    readonly_fields = ("notified_at",)
     actions = ["close_matches"]
 
     @admin.action(description="Close selected matches")
@@ -162,6 +212,126 @@ class PotentialMatchAdmin(admin.ModelAdmin):
             f"{rejected} rejected, {skipped} skipped.",
             level=messages.SUCCESS if rejected else messages.WARNING,
         )
+
+
+@admin.register(IdentityCandidate)
+class IdentityCandidateAdmin(admin.ModelAdmin):
+    """Least-privilege identity review, separate from match approval."""
+
+    list_display = (
+        "id",
+        "crush_entry",
+        "candidate",
+        "confidence_score",
+        "name_similarity",
+        "status",
+        "reviewed_by",
+        "reviewed_at",
+        "created_at",
+    )
+    list_filter = ("status", "created_at")
+    search_fields = (
+        "crush_entry__full_name",
+        "candidate__full_name",
+        "crush_entry__submitted_by__full_name",
+    )
+    autocomplete_fields = ("crush_entry", "candidate")
+    readonly_fields = (
+        "confidence_score",
+        "name_similarity",
+        "evidence",
+        "reviewed_by",
+        "reviewed_at",
+        "created_at",
+        "updated_at",
+    )
+    actions = ["confirm_selected", "reject_selected", "defer_selected"]
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser or request.user.has_perm(
+            "campus.review_identitycandidate"
+        )
+
+    def has_change_permission(self, request, obj=None):
+        return self.has_view_permission(request, obj)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def _run(self, request, queryset, fn, label):
+        done = skipped = 0
+        for candidate in queryset:
+            try:
+                fn(
+                    candidate,
+                    request.user,
+                    notes=f"{label} from Django admin.",
+                )
+            except Exception:  # noqa: BLE001 - report a count, not private data
+                skipped += 1
+            else:
+                done += 1
+        self.message_user(
+            request,
+            f"{done} {label.lower()}, {skipped} skipped.",
+            level=messages.SUCCESS if done else messages.WARNING,
+        )
+
+    @admin.action(description="Confirm selected identity candidates")
+    def confirm_selected(self, request, queryset):
+        from .identity_resolution import confirm_candidate
+
+        self._run(request, queryset, confirm_candidate, "Confirmed")
+
+    @admin.action(description="Reject selected identity candidates")
+    def reject_selected(self, request, queryset):
+        from .identity_resolution import reject_candidate
+
+        self._run(request, queryset, reject_candidate, "Rejected")
+
+    @admin.action(description="Defer selected identity candidates")
+    def defer_selected(self, request, queryset):
+        from .identity_resolution import defer_candidate
+
+        self._run(request, queryset, defer_candidate, "Deferred")
+
+
+@admin.register(IdentityResolutionAudit)
+class IdentityResolutionAuditAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "action",
+        "crush_entry",
+        "candidate",
+        "actor",
+        "from_status",
+        "to_status",
+        "created_at",
+    )
+    list_filter = ("action", "created_at")
+    search_fields = ("crush_entry__full_name", "candidate__full_name", "actor__username")
+    readonly_fields = (
+        "crush_entry",
+        "candidate",
+        "actor",
+        "action",
+        "from_status",
+        "to_status",
+        "notes",
+        "created_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
 
 
 @admin.register(Rose)

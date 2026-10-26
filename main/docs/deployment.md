@@ -32,6 +32,15 @@ REDIS_URL=redis://…/1
 RATELIMIT_ENABLE=True
 ANALYTICS_ENABLED=False            # set both only when using Plausible
 ANALYTICS_DOMAIN=
+# Identity resolution (safe defaults; only change with a reviewed rollout)
+IDENTITY_AUTO_RESOLVE_ENABLED=True
+IDENTITY_AUTO_RESOLVE_MIN_NAME_SIMILARITY=0.88
+IDENTITY_NAME_CANDIDATE_MIN=0.70
+IDENTITY_CANDIDATE_MIN_SCORE=50
+IDENTITY_MAX_CANDIDATES=10
+IDENTITY_FUZZY_SCAN_LIMIT=500
+IDENTITY_REGISTRATION_SCAN_LIMIT=500
+IDENTITY_REQUIRE_STUDENT_VERIFICATION_FOR_AUTO=False
 ```
 
 `DEBUG=False` turns on HSTS, secure cookies and an SSL redirect that expects a
@@ -58,8 +67,32 @@ python manage.py test
 python manage.py runserver --insecure   # dev only
 ```
 
-Production workers must be HTTP/WSGI behind the proxy; create the admin and
-the verifier user with `campus.verify_potentialmatch` permission granted.
+Production workers must be HTTP/WSGI behind the proxy; create the admin and the
+review users with `campus.verify_potentialmatch` (match desk) and/or
+`campus.review_identitycandidate` (identity desk) permissions granted.
+
+### Identity-resolution migration (`campus.0004`)
+
+Migration `0004_identitycandidate_identityresolutionaudit_and_more` adds
+normalized names, optional crush rolls, resolved identity links, candidates,
+audit rows, and `MutualMatch.notified_at`. It also backfills:
+
+- normalized campus/profile/entry names and rolls;
+- legacy exact-campus+roll proposals as resolved identities (ambiguous entries
+  are left for review);
+- existing mutual matches as already notified, so the new guard cannot send a
+  duplicate alert.
+
+Before deploying:
+
+1. Take and verify a database backup.
+2. Run `python manage.py migrate` in a staging copy and time it.
+3. Check the identity queue at `/staff/identities/` after deploy; legacy entries
+   without a reliable exact roll may legitimately appear there.
+4. Grant the new review permission only to staff who need it.
+
+Rollback of the migration is schema-only (`RunPython` reverse is a no-op), so
+restore the pre-migration backup rather than reversing in production.
 
 ## Static + media
 
@@ -93,9 +126,11 @@ the verifier user with `campus.verify_potentialmatch` permission granted.
       accepts the credentials and that a message really leaves the box.
 - [ ] Redis reachable, `CACHES` pointed at it, `RATELIMIT_ENABLE=True`.
 - [ ] `seed_posts` run so the blog isn't an empty directory index.
-- [ ] Backups for Postgres and `MEDIA_ROOT`.
-- [ ] Monitoring on: 5xx rate, match-verification queue length (`/staff/`),
-      429 codes, `Reports` backlog.
+- [ ] Backups for Postgres and `MEDIA_ROOT`; restore drill completed.
+- [ ] `python manage.py migrate` applied; identity backfill reviewed.
+- [ ] Monitoring on: 5xx rate, match queue (`/staff/matches/`), identity queue
+      (`/staff/identities/`), 429 codes, `Reports` backlog, duplicate
+      notification counts.
 - [ ] `robots.txt` and `sitemap.xml` return 200 with `SITE_URL` correct.
 
 ## Not in scope

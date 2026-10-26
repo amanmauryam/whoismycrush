@@ -8,6 +8,8 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
+from django.db.models.signals import pre_delete
+from django.dispatch import receiver
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
@@ -73,6 +75,12 @@ class College(models.Model):
     """A campus / community. Crushes never cross this boundary."""
 
     name = models.CharField(max_length=180, unique=True)
+    normalized_name = models.CharField(
+        max_length=180,
+        blank=True,
+        db_index=True,
+        help_text="Case/punctuation-insensitive form used to spot duplicate campuses.",
+    )
     slug = models.SlugField(
         max_length=200,
         unique=True,
@@ -91,14 +99,25 @@ class College(models.Model):
 
     class Meta:
         ordering = ["name"]
-        indexes = [models.Index(fields=["name"]), models.Index(fields=["city"])]
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["normalized_name"]),
+            models.Index(fields=["city"]),
+        ]
 
     def __str__(self) -> str:
         return self.display_name
 
     def save(self, *args, **kwargs):
+        self.normalized_name = normalize_text(self.name)
         if not self.slug:
             self.slug = self._unique_slug()
+        if kwargs.get("update_fields") is not None:
+            kwargs["update_fields"] = {
+                *kwargs["update_fields"],
+                "normalized_name",
+                "slug",
+            }
         super().save(*args, **kwargs)
 
     def _unique_slug(self) -> str:
@@ -167,6 +186,7 @@ class StudentProfile(models.Model):
         College, on_delete=models.PROTECT, related_name="student_profiles"
     )
     full_name = models.CharField(max_length=120)
+    normalized_name = models.CharField(max_length=120, blank=True, db_index=True)
     nickname = models.CharField(max_length=60, blank=True)
     roll_number = models.CharField(max_length=60)
     normalized_roll_number = models.CharField(max_length=60, db_index=True)
@@ -198,6 +218,7 @@ class StudentProfile(models.Model):
         ]
         indexes = [
             models.Index(fields=["college", "normalized_roll_number"]),
+            models.Index(fields=["college", "normalized_name"]),
             models.Index(fields=["college", "full_name"]),
         ]
 
@@ -206,8 +227,15 @@ class StudentProfile(models.Model):
 
     def save(self, *args, **kwargs):
         self.normalized_roll_number = normalize_roll_number(self.roll_number)
+        self.normalized_name = normalize_name(self.full_name)
         if not self.normalized_roll_number:
             raise ValidationError({"roll_number": "Enter your roll number."})
+        if kwargs.get("update_fields") is not None:
+            kwargs["update_fields"] = {
+                *kwargs["update_fields"],
+                "normalized_name",
+                "normalized_roll_number",
+            }
         super().save(*args, **kwargs)
 
     def clean(self):
@@ -274,14 +302,22 @@ class CrushEntryQuerySet(models.QuerySet):
 class CrushEntry(models.Model):
     """A hand-typed "I secretly like this person" record (requirements 1-5).
 
-    This is deliberately **not** a relation to ``User`` or ``StudentProfile``.
-    The crush is usually someone who has never opened the site, so all we can
-    store is what the submitter happens to know (requirements 4/5).
+    The submitted details are kept independently of a registered account. A
+    crush usually has no account, so this row never *requires* a
+    ``StudentProfile``. ``resolved_student`` is filled only after the identity
+    engine finds sufficient, reviewed evidence; it is a link, not a guess.
 
     ``priority`` is an internal 1..3 ordering. It exists only so the admin can
     sanity-check a submission during verification. It must never be rendered,
     emailed, or exposed to either student (requirements 2/13).
     """
+
+    class ResolutionStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        CANDIDATE_FOUND = "candidate_found", "Candidate found"
+        NEEDS_REVIEW = "needs_review", "Needs review"
+        RESOLVED = "resolved", "Resolved"
+        UNRESOLVABLE = "unresolvable", "Unresolvable"
 
     submitted_by = models.ForeignKey(
         StudentProfile, on_delete=models.CASCADE, related_name="crush_entries"
@@ -290,8 +326,11 @@ class CrushEntry(models.Model):
         help_text="Internal ordering 1-3. Never shown to either student."
     )
     full_name = models.CharField(max_length=255)
-    roll_number = models.CharField(max_length=100)
-    normalized_roll_number = models.CharField(max_length=100, db_index=True)
+    normalized_name = models.CharField(max_length=255, blank=True, db_index=True)
+    roll_number = models.CharField(max_length=100, blank=True)
+    normalized_roll_number = models.CharField(
+        max_length=100, blank=True, db_index=True
+    )
     college = models.ForeignKey(
         College, on_delete=models.PROTECT, related_name="crush_entries"
     )
@@ -302,6 +341,31 @@ class CrushEntry(models.Model):
     nickname = models.CharField(max_length=100, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
+
+    # -- identity resolution state (independent of match status) -----------
+    identity_status = models.CharField(
+        max_length=20,
+        choices=ResolutionStatus.choices,
+        default=ResolutionStatus.PENDING,
+        db_index=True,
+    )
+    resolved_student = models.ForeignKey(
+        StudentProfile,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="resolved_crush_entries",
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolution_confidence = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Advisory identity confidence. Never shown to students.",
+    )
+    resolution_method = models.CharField(max_length=40, blank=True)
+    resolution_notes = models.CharField(max_length=300, blank=True)
 
     objects = CrushEntryQuerySet.as_manager()
 
@@ -316,10 +380,22 @@ class CrushEntry(models.Model):
                 condition=Q(priority__gte=1) & Q(priority__lte=MAX_CRUSHES),
                 name="crush_entry_priority_range",
             ),
+            # A resolved link may only exist on a resolved row. The reverse is
+            # enforced by the service, because account deletion sets the link
+            # to NULL while the cleanup signal moves the row back to pending.
+            models.CheckConstraint(
+                condition=Q(resolved_student__isnull=True)
+                | Q(identity_status="resolved"),
+                name="crush_resolved_link_requires_status",
+            ),
         ]
         indexes = [
-            # The identity lookup the matcher always uses (requirements 7/8).
+            # Exact roll lookup and name-first fallback are the two indexed
+            # candidate paths. Expensive fuzzy comparison happens after the
+            # college scope has already narrowed the rows.
             models.Index(fields=["college", "normalized_roll_number"]),
+            models.Index(fields=["college", "normalized_name"]),
+            models.Index(fields=["identity_status", "is_active"]),
             models.Index(fields=["submitted_by", "is_active"]),
         ]
 
@@ -327,26 +403,44 @@ class CrushEntry(models.Model):
         return f"#{self.priority} · {self.full_name}"
 
     def save(self, *args, **kwargs):
+        self.normalized_name = normalize_name(self.full_name)
         self.normalized_roll_number = normalize_roll_number(self.roll_number)
-        if not self.normalized_roll_number:
-            raise ValidationError({"roll_number": "Enter the roll number."})
+        if kwargs.get("update_fields") is not None:
+            kwargs["update_fields"] = {
+                *kwargs["update_fields"],
+                "normalized_name",
+                "normalized_roll_number",
+            }
         super().save(*args, **kwargs)
 
     def clean(self):
         super().clean()
         if self.priority and not 1 <= self.priority <= MAX_CRUSHES:
             raise ValidationError({"priority": "Choose between 1 and 3."})
-        if self.submitted_by_id and self.submitted_by_id == getattr(
-            self, "matched_student_id", None
+        if (
+            self.submitted_by_id
+            and self.resolved_student_id
+            and self.submitted_by_id == self.resolved_student_id
         ):
             raise ValidationError("You cannot enter yourself as a crush.")
+        if self.resolved_student_id and self.resolved_student_id != self.submitted_by_id:
+            if self.college_id and self.resolved_student and (
+                self.college_id != self.resolved_student.college_id
+            ):
+                raise ValidationError("A resolved crush must be on the same campus.")
 
     @property
     def masked_roll_number(self) -> str:
         roll = self.roll_number
+        if not roll:
+            return "—"
         if len(roll) <= 3:
             return "•••"
         return "•••" + roll[-3:]
+
+    @property
+    def has_roll_number(self) -> bool:
+        return bool(self.normalized_roll_number)
 
     @property
     def course_line(self) -> str:
@@ -394,6 +488,11 @@ class MutualMatch(models.Model):
     user_b_consented = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     revealed_at = models.DateTimeField(null=True, blank=True)
+    notified_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set atomically before notifications, so a pair is announced at most once.",
+    )
 
     objects = MutualMatchQuerySet.as_manager()
 
@@ -588,6 +687,152 @@ class PotentialMatch(models.Model):
         return tuple(sorted([self.author.pk, self.registered_student.pk]))
 
 
+class IdentityCandidate(models.Model):
+    """One possible registered identity for a hand-typed crush entry.
+
+    This is deliberately separate from ``PotentialMatch``: identity resolution
+    answers *who is this person?*, while a potential match answers *do two
+    people like each other?*. A candidate never notifies anyone and never
+    appears in a student-facing view.
+    """
+
+    class Status(models.TextChoices):
+        CANDIDATE = "candidate", "Candidate"
+        NEEDS_REVIEW = "needs_review", "Needs review"
+        CONFIRMED = "confirmed", "Confirmed"
+        REJECTED = "rejected", "Rejected"
+        DEFERRED = "deferred", "Deferred"
+        SUPERSEDED = "superseded", "Superseded"
+
+    crush_entry = models.ForeignKey(
+        CrushEntry, on_delete=models.CASCADE, related_name="identity_candidates"
+    )
+    candidate = models.ForeignKey(
+        StudentProfile,
+        on_delete=models.CASCADE,
+        related_name="identity_candidates",
+    )
+    confidence_score = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Advisory identity score for reviewers. Never shown to students.",
+    )
+    name_similarity = models.DecimalField(
+        max_digits=4, decimal_places=3, null=True, blank=True
+    )
+    evidence = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Explainable scoring inputs: roll, name, course, year, conflicts.",
+    )
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.CANDIDATE, db_index=True
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reviewed_identity_candidates",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-confidence_score", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["crush_entry", "candidate"],
+                name="unique_identity_candidate",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["status", "-created_at"]),
+            models.Index(fields=["candidate", "status"]),
+            models.Index(fields=["crush_entry", "status"]),
+        ]
+        permissions = [
+            (
+                "review_identitycandidate",
+                "Can review and confirm ambiguous crush identities",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"IC#{self.pk} · entry {self.crush_entry_id} → {self.candidate_id}"
+
+    @property
+    def is_open(self) -> bool:
+        return self.status in {
+            self.Status.CANDIDATE,
+            self.Status.NEEDS_REVIEW,
+            self.Status.DEFERRED,
+        }
+
+    @property
+    def author(self) -> StudentProfile:
+        return self.crush_entry.submitted_by
+
+
+class IdentityResolutionAudit(models.Model):
+    """Append-only record of identity decisions.
+
+    Only ids and a short reason are stored. The original crush details stay on
+    ``CrushEntry``; this table exists to answer *who decided what, when* without
+    duplicating sensitive text into logs or exports.
+    """
+
+    class Action(models.TextChoices):
+        AUTO_RESOLVED = "auto_resolved", "Auto resolved"
+        CONFIRMED = "confirmed", "Confirmed by reviewer"
+        REJECTED = "rejected", "Rejected by reviewer"
+        DEFERRED = "deferred", "Deferred by reviewer"
+        INVALIDATED = "invalidated", "Invalidated"
+        UNRESOLVABLE = "unresolvable", "Marked unresolvable"
+        REOPENED = "reopened", "Reopened"
+
+    crush_entry = models.ForeignKey(
+        CrushEntry,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="resolution_audit",
+    )
+    candidate = models.ForeignKey(
+        StudentProfile,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="resolution_audit",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="identity_resolution_actions",
+    )
+    action = models.CharField(max_length=30, choices=Action.choices)
+    from_status = models.CharField(max_length=30, blank=True)
+    to_status = models.CharField(max_length=30, blank=True)
+    notes = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["crush_entry", "-created_at"]),
+            models.Index(fields=["action", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.action} · entry {self.crush_entry_id}"
+
+
 class Rose(models.Model):
     """Optional post-match gift. Never a payment for basic matching."""
 
@@ -738,6 +983,29 @@ class Notification(models.Model):
 
     def __str__(self) -> str:
         return self.message
+
+
+@receiver(pre_delete, sender=StudentProfile)
+def _release_deleted_students_identity_links(sender, instance, **kwargs):
+    """Never leave a crush row claiming a deleted person was verified.
+
+    The original typed evidence is kept; only the verified link is cleared. That
+    lets a later correction or a re-registration be handled by a reviewer
+    instead of silently retaining a stale identity binding.
+    """
+
+    CrushEntry.objects.filter(resolved_student=instance).update(
+        identity_status=CrushEntry.ResolutionStatus.PENDING,
+        resolved_student=None,
+        resolved_at=None,
+        resolution_confidence=None,
+        resolution_method="",
+        resolution_notes="Registered account was deleted; review again.",
+    )
+    PotentialMatch.objects.filter(
+        Q(registered_student=instance) | Q(crush_entry__submitted_by=instance),
+        status=PotentialMatch.Status.PENDING,
+    ).delete()
 
 
 def default_minimum_age() -> int:

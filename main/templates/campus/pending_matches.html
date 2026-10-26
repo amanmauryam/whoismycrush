@@ -12,6 +12,13 @@
       Only reciprocal pairs appear here. Nothing is announced to either student
       until you approve it, and a one-sided entry can never be a match.
     </p>
+    {% if perms.campus.review_identitycandidate or user.is_superuser %}
+      <p>
+        <a class="btn btn-sm" href="{% url 'campus:identity_review' %}">
+          Review ambiguous identities
+        </a>
+      </p>
+    {% endif %}
   </div>
 
   <div class="notice-box">

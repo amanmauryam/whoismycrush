@@ -14,13 +14,14 @@ detail view and the Django admin action call that one function (requirements
 from __future__ import annotations
 
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 
 from config.mail import send_mail
 
 from .models import (
     MAX_CRUSHES,
+    Block,
     CrushEntry,
     MutualMatch,
     Notification,
@@ -104,6 +105,7 @@ def approve_potential_match(
     idempotent per pair so the same mutual can never be created or announced
     twice (requirements 14/18).
     """
+    potential_match.refresh_from_db()
     if potential_match.status != PotentialMatch.Status.PENDING:
         raise ApprovalError("This proposal has already been reviewed.")
     if potential_match.registered_student_id == potential_match.author.pk:
@@ -115,6 +117,7 @@ def approve_potential_match(
             "The other student has not entered this person yet, so there is "
             "nothing to approve."
         )
+    partner.refresh_from_db()
     if partner.status == PotentialMatch.Status.REJECTED:
         raise ApprovalError("The reciprocal half of this pair was already rejected.")
 
@@ -122,14 +125,45 @@ def approve_potential_match(
     candidate = potential_match.registered_student
     if author.college_id != candidate.college_id:
         raise ApprovalError("Crushes can never cross a campus boundary.")
+    if not author.user.is_active or not candidate.user.is_active:
+        raise ApprovalError("One of these accounts is no longer active.")
+    if Block.objects.filter(
+        Q(blocker=author, blocked=candidate) | Q(blocker=candidate, blocked=author)
+    ).exists():
+        raise ApprovalError("A block prevents this match from being approved.")
+
+    # Only correctly resolved reciprocal identities may become a match. This
+    # catches an entry edited after the proposal was queued. Read the entries
+    # fresh rather than trusting a cached related object.
+    entry_a = CrushEntry.objects.get(pk=potential_match.crush_entry_id)
+    entry_b = CrushEntry.objects.get(pk=partner.crush_entry_id)
+    if entry_a.resolved_student_id != candidate.pk:
+        raise ApprovalError(
+            "Person A's entry is no longer verified as pointing at Person B. "
+            "Resolve the identity again before approving."
+        )
+    if entry_b.resolved_student_id != author.pk:
+        raise ApprovalError(
+            "Person B's entry is no longer verified as pointing at Person A. "
+            "Resolve the identity again before approving."
+        )
 
     now = _now()
     with transaction.atomic():
-        match, created = MutualMatch.objects.get_or_create(
-            user_a_id=min(author.pk, candidate.pk),
-            user_b_id=max(author.pk, candidate.pk),
-            defaults={"status": MutualMatch.Status.MUTUAL},
-        )
+        try:
+            with transaction.atomic():
+                match, created = MutualMatch.objects.get_or_create(
+                    user_a_id=min(author.pk, candidate.pk),
+                    user_b_id=max(author.pk, candidate.pk),
+                    defaults={"status": MutualMatch.Status.MUTUAL},
+                )
+        except IntegrityError:
+            # A concurrent approval won the unique-pair race.
+            match = MutualMatch.objects.get(
+                user_a_id=min(author.pk, candidate.pk),
+                user_b_id=max(author.pk, candidate.pk),
+            )
+            created = False
 
         for row in (potential_match, partner):
             row.status = PotentialMatch.Status.APPROVED
@@ -149,9 +183,15 @@ def approve_potential_match(
             )
 
         # Announce only now, once, and only when this approval is what created
-        # the match. Re-approving an already-existing pair never re-notifies.
+        # the match. The conditional UPDATE is the at-most-once claim: two
+        # concurrent approvers cannot both send the same notification.
         if created:
-            notify_match(match)
+            claimed = MutualMatch.objects.filter(
+                pk=match.pk, notified_at__isnull=True
+            ).update(notified_at=now)
+            if claimed:
+                notify_match(match)
+                match.refresh_from_db()
     return match
 
 

@@ -1,309 +1,414 @@
-# Admin guide
+# Admin guide (single admin)
 
-This is the operating manual for whoever runs WhoIsMyCrush. Every task below
-answers the same three questions: **when** to do it, **why** it matters, and
-exactly **what to click or run**.
+Yeh guide WhoIsMyCrush ke **ekmatra admin** ke liye hai. Aap hi manager aur final
+decision maker ho. Koi doosra admin account nahi hai. Har important kaam aap
+khud karoge.
 
-The one rule that outranks everything else: **no match is announced until a
-human approves it.** The review desk is therefore the most important admin
-screen in the product. A slow or careless queue directly breaks the promise the
-site makes to students.
+**Real admin address:**
 
----
+<https://whoismycrush.com/802134admin/>
 
-## 1. Roles and access
+Sirf yahi real address use karein. Purane notes ka koi doosra address kaam nahi
+karega.
 
-There are two different admin surfaces:
+**Sabse important rule:** student ko match tabhi dikhega jab **aap approve
+karenge**. Approve ka matlab hai aapki final "haan". Approve se pehle dono
+students ki details check karna zaroori hai.
 
-| Surface | URL | Who gets in | What it is for |
-| --- | --- | --- | --- |
-| Django admin | `/admin/` | `is_staff=True` | Raw model management: campuses, students, entries, blog, reports, users. |
-| Verification desk | `/staff/matches/` | `is_superuser` **or** (`is_staff` **and** `campus.verify_potentialmatch`) | The safe, side-by-side match review screen with notes. |
-
-Recommended roles:
-
-| Role | Access | Give them | Do not give them |
-| --- | --- | --- | --- |
-| Owner / superuser | Everything | Full admin, settings, users | Nothing extra; keep the account count small |
-| Match verifier | Review desk only | `is_staff` + `campus.verify_potentialmatch` | Superuser, blog, user management |
-| Content editor | Pro Tips only | Blog category/post permissions | Student, match, report, or user access |
-| Ops / engineering | Terminal | Deploy, backups, commands | Routine student-data access |
-
-### Create a verifier (do this once per person)
-
-1. Open `/admin/auth/user/add/`.
-2. Set a username and a strong password.
-3. Tick **Staff status**. Leave **Superuser status** unticked.
-4. Save, then under **Permissions** add
-   `Campus | Potential match | Can approve or reject potential matches`.
-5. Save again.
-
-Why: the dedicated permission lets a moderator do exactly one job. It also
-means every approval records a real `verified_by` user, which is the only audit
-trail the product has.
-
-Never share a login between people. If someone leaves, deactivate their user
-immediately; do not delete it, because deleted users erase the `verified_by`
-link from past approvals.
+**Privacy rule:** kisi student ko kabhi na batayein ki usne kisko chuna, kisi ne
+use kya likha, ya uski list mein kya priority thi. Support reply mein bhi nahi.
 
 ---
 
-## 2. First-time setup
+## 1. Simple words (Hinglish)
 
-Run these once on a new environment, in this order:
+Technical word use hone se pehle yahan uska simple matlab diya hai.
+
+| Word | Simple Hinglish meaning |
+| --- | --- |
+| Admin | Website ka manager. Control room se saara data dekha aur manage kiya jata hai. |
+| URL | Web address, jaise `https://whoismycrush.com/802134admin/`. |
+| Django admin | Website ka control room. Yahan se students, entries, matches aur reports manage hoti hain. |
+| Server | Computer jo website ko live rakhta hai. |
+| Hosting | Company jo website ka server chalati hai. |
+| Live site | Asli website, jise students use karte hain. |
+| Database | Data rakhne ki jagah. Isme har student, entry aur match ki ek line hoti hai. |
+| Record / row | List ki ek line. Example: ek student ka profile ya ek match proposal. |
+| Field / box | Form ka ek khaana, jaise Name, Roll number ya Status. |
+| Status | Kisi record ki current condition. Example: Pending, Approved, Rejected. |
+| Filter | List ko chhota karne ka option. Example: sirf "Pending" wale records dikhana. |
+| Action | List ke upar ka dropdown. Selected records par ek saath kaam karne ke liye. |
+| Approve | Final "haan". Match approve karne par students ko alert jata hai. |
+| Reject | "Nahi". Match reject karne par kisi ko alert nahi jata. |
+| Defer | "Abhi decide nahi". Baad mein proof milne par phir dekhna. |
+| Roll number | College ka student ID. |
+| Priority | Student ki list mein 1 se 3 ka internal order. Student ko kabhi na dikhe. |
+| Identity candidate | Ek possible registered student. Yeh match nahi hai, sirf pehchaan ka sujhav hai. |
+| Potential match | Ek match proposal. Yeh abhi match nahi hai; aapki approval ke baad match banta hai. |
+| Mutual match | Dono students ne ek doosre ko chuna, aur aapne approve kiya. |
+| Backup | Safety copy. Kuch bada change karne se pehle purani copy save karna. |
+| Command | Terminal mein diya gaya chhota instruction. Terminal ek black command window hoti hai. |
+| Migration | Database ka structure update karne ka step. |
+| Deploy | Naya code website par live karna. |
+| SMTP | Email bhejne ka system. |
+| Environment setting | Server ki settings, jo code ke bahar ek settings file mein hoti hain. |
+| Slug | Web address ka last part. Example: `pro-tips/first-crush/` mein `first-crush` slug hai. |
+| Reveal | Dono students ki permission ke baad ek doosre ka naam kholna. |
+| In-app alert | Website ke andar dikhne wala notification. |
+| Audit / audit trail | Kaun, kab, kya change kiya, iska permanent record. |
+| Log | System ka record, jahan errors aur events likhe jate hain. |
+| Secret key | Website ki security key. Isse badalne par purane logins band ho jate hain. |
+| Rate limit | Ek user ko bahut zyada requests bhejne se rokna. |
+| HTML | Web page banane ka code. |
+| UTC | Duniya ka standard time; India ka time UTC se 5 ghante 30 minute aage hai. |
+| WebP | Halka image format, jo website ko fast rakhta hai. |
+| SEO | Google jaise search engine mein page ko sahi dikhane ki setting. |
+| Canonical URL | Batana ki isi content ka asli address kaun sa hai. |
+| Sitemap | Search engine ke liye website ke pages ki list. |
+| Robots file | Search engine ko batati hai kaun se page dekhne hain. |
+| App password | Email app ke liye special password, normal account password nahi. |
+| Test / staging server | Live site ki copy, jahan pehle change test karte hain. |
+| Restore | Backup se purana data wapas laana. |
+| Dependencies | Website ke saath kaam karne wale doosre software. |
+
+---
+
+## 2. Your login and access
+
+Aapke paas sirf **ek admin login** hona chahiye. Yeh login sab kuch kar sakta
+hai, isliye ise sambhal kar rakhein.
+
+### Login
+
+1. Browser mein yeh real address kholein:
+   <https://whoismycrush.com/802134admin/>
+2. Username aur password daalein.
+3. Login ke baad aapko control room ka home page dikhega.
+
+### Rules
+
+- Password kisi ke saath share na karein. Notepad, chat ya email mein save na
+  karein.
+- Public computer par kaam ke baad **Log out** karein.
+- Doosra admin account na banayein. Aap hi ek admin ho.
+- Agar password bhool jayein, server par yeh command chalayein:
+  `python manage.py changepassword your-admin-username`
+  Isme `your-admin-username` ki jagah apna username likhein. Command ka matlab:
+  "mere admin account ka password badal do."
+- Agar login page na khule, pehle URL check karein. URL mein `/802134admin/`
+  hona chahiye.
+
+---
+
+## 3. First-time setup
+
+Yeh steps naye server par ek baar chalte hain. Command ka matlab simple Hinglish
+mein neeche diya hai.
 
 ```powershell
-python manage.py migrate                 # create the schema
-python manage.py seed_posts              # Pro Tips content (idempotent)
-python manage.py seed_colleges           # optional starter campus list
-python manage.py createsuperuser         # owner account
-python manage.py collectstatic --noinput # CKEditor + site assets for WhiteNoise
-python manage.py check_email --to you@example.com
+python manage.py migrate
+python manage.py seed_posts
+python manage.py seed_colleges
+python manage.py createsuperuser
+python manage.py collectstatic --noinput
+python manage.py check_email --to noreply@whoismycrush.com
 ```
 
-Why each step:
+- `migrate` = database ka structure banayein ya update karein.
+- `seed_posts` = shuruaat ke Pro Tips articles daalein. Isse dobara chalane par
+  purane articles kharab nahi hote.
+- `seed_colleges` = kuch starter colleges ki list daalein. Isse dobara chalana
+  safe hai.
+- `createsuperuser` = admin account banayein. `superuser` ka simple matlab hai
+  "poora access wala admin".
+- `collectstatic` = website ke design files, images aur editor files server par
+  copy karein.
+- `check_email` = test email bhejkar check karein ki email system kaam kar raha
+  hai. Test ke liye apna working email daalein.
 
-- `migrate` — nothing works before the tables exist.
-- `seed_posts` — the public Pro Tips page is otherwise an empty directory.
-- `seed_colleges` — gives the campus picker a starter list. Safe to re-run.
-- `createsuperuser` — the only account that can reach `/admin/` on day one.
-- `collectstatic` — CKEditor's toolbar/assets are static files; without this
-  the editor and some images 404 in production.
-- `check_email` — proves SMTP credentials and that a real message leaves the
-  box. A broken mail server should be found here, not by a student waiting for
-  a confirmation link.
+**Sirf testing ke liye commands:** `seed_demo` fake students banata hai, aur
+`seed_match` ek demo match approve karke asli match alerts bhej deta hai. Live
+site par yeh commands kabhi na chalayein.
 
-`seed_demo` and `seed_match` are **development tools only**. `seed_demo` creates
-fake students; `seed_match` also creates and approves a demo match, which sends
-the real match notifications. Never run them against production data.
+### Important server settings
 
-### Environment switches an admin cares about
+Yeh settings server ki settings file (environment file) mein hoti hain. Agar aap
+khud server manage nahi karte, hosting support ko yeh values dein.
 
-| Variable | Default | Why the admin should care |
+| Setting | Correct live value | Simple matlab |
 | --- | --- | --- |
-| `DEBUG` | `True` | Must be `False` in production. Enables TLS redirect, secure cookies, HSTS. |
-| `ALLOWED_HOSTS` | localhost | Production domain must be listed or every request 400s. |
-| `SITE_URL` | `http://127.0.0.1:8000` | Used in emails, sitemap and canonical URLs. Set the real HTTPS domain. |
-| `EMAIL_VERIFICATION_REQUIRED` | `False` | When `True`, unverified accounts are held on a notice page. |
-| `MATCH_EMAILS_ENABLED` | `True` | Turns the "it's mutual" email on/off. In-app notifications still work. |
-| `RATELIMIT_ENABLE` | `True` | Protects register/login/reset/crush actions from abuse. |
-| `CACHE_BACKEND` | `locmem` | Multi-worker production should use `redis` so limits are shared. |
-| `MINIMUM_AGE` | `18` | Age gate during identity creation. |
+| `SITE_URL` | `https://whoismycrush.com` | Emails aur website links mein yahi address use hoga. |
+| `ALLOWED_HOSTS` | `whoismycrush.com` | Sirf isi website ko server par kaam karne dena. |
+| `DEBUG` | `False` | Live site par errors ki detailed screen band rakhna. |
+| `EMAIL_VERIFICATION_REQUIRED` | `True` ya `False` | `True` ka matlab student ko email confirm karna hoga. |
+| `MATCH_EMAILS_ENABLED` | `True` | Match approve hone par email bhejni hai ya nahi. Website ke andar ka alert phir bhi aayega. |
 
-Full production checklist: `docs/deployment.md`.
-
----
-
-## 3. The two ways to approve a match
-
-Both paths call the same service function, so the data and notifications are
-identical. The difference is the audit note.
-
-| Path | Best for | Notes |
-| --- | --- | --- |
-| `/staff/matches/<id>/` | Every normal decision | Side-by-side identity comparison, review note field, single approve/reject. **Use this.** |
-| `/admin/campus/potentialmatch/` | Bulk cleanup / emergencies | Approve/reject actions work on many rows at once and **cannot collect a note**. |
-
-Approving from the admin list executes immediately. If you select the wrong
-rows, real students are notified before you can fix it. Prefer the review desk,
-and if you must use bulk actions, select rows one pair at a time and re-check
-the selection before confirming.
+Poori live-site checklist: `docs/deployment.md`.
 
 ---
 
 ## 4. Daily routine (15-30 minutes)
 
-Do this every day, including weekends if the site is live. The queue is the
-product; a stale queue means mutual crushes are sitting unseen.
+Live site par har din, weekend bhi, yeh order follow karein. Queue ka matlab hai
+"jin cheezon ka aapko intezaar hai". Queue purani na chhodein, warna students ko
+match late milega.
 
-### 4.1 Clear the pending match queue
+### 4.1 Pehle unclear identities solve karein
 
-**When:** at least once a day, and before any marketing push or campus event.
+**Kab:** roz, aur match proposals approve karne se pehle.
 
-**Why:** a pending pair is *not* a match yet. Neither student is told anything
-until you approve. Delay = the core feature appears broken.
+**Kyun:** agar student ki pehchaan clear nahi hai, to match safe tarike se
+approve nahi ho sakta.
 
-**Steps**
+**Real page:**
+<https://whoismycrush.com/802134admin/campus/identitycandidate/>
 
-1. Open `/staff/matches/`.
-2. Work top to bottom (highest confidence first).
-3. Click **Review** on one pair.
-4. Verify the two identities (checklist below).
-5. Add a short **Review note** explaining the decision.
-6. Click **Approve match** only if certain. Otherwise **Reject match**.
-7. Never approve a pair you have not opened and compared.
+1. Page kholein.
+2. Right side ke **Filter** se **Status** = **Candidate** ya **Needs review**
+   chunein.
+3. Ek row kholein. Usme likha hoga:
+   - student ne kya naam type kiya,
+   - system ko kaun sa registered student milta jaisa lag raha hai,
+   - naam kitna milta hai,
+   - course, year aur section kitna match karta hai.
+4. Details ko dhyan se compare karein. Sirf naam dekhkar confirm na karein.
+5. Agar ek hi student saaf taur par sahi hai, to row ke left wala checkbox
+   tick karein. Phir upar **Action** dropdown se
+   **Confirm selected identity candidates** chunein aur **Go** dabayein.
+6. Agar candidate galat hai, to **Reject selected identity candidates** chunein.
+7. Agar external proof chahiye, to **Defer selected identity candidates** chunein.
+8. Agar kisi bhi student ko safe tarike se identify nahi kar sakte, to
+   **Crush entries** page kholein:
+   <https://whoismycrush.com/802134admin/campus/crushentry/>
+   Wahan entry select karein aur **Mark identity unresolvable (keeps original
+   entry)** action chunein. Isse original entry private rehti hai aur ghalat
+   match nahi banta.
+9. Baad mein identity dobara check karni ho to **Reopen identity resolution**
+   action use karein.
 
-### 4.2 Verification checklist
+Is step par kisi student ko koi alert nahi jata. Identity confirm karna sirf
+"yeh banda kaun hai" clear karta hai. Match tabhi banta hai jab dono taraf ki
+entry ho aur aap match approve karein.
 
-Approve only when every line is true:
+#### Proper example: missing roll number
 
-- [ ] Both students are at the **same college**.
-- [ ] Both typed the same **normalized roll number** as the registered student
-      (case, spaces and punctuation do not matter; different characters do).
-- [ ] The typed **name** is the same person: allow spelling drift, but not a
-      different surname or a different first name.
-- [ ] **Course, year and section** do not contradict each other. A hard
-      contradiction means two different people who happen to share a roll.
-- [ ] It is a **reciprocal pair**: Person A entered Person B *and* Person B
-      entered Person A. One-sided entries cannot be approved.
-- [ ] Neither student is the other's own profile (self-match).
-- [ ] There is no duplicate profile or duplicate campus involved.
-- [ ] No block exists between the two students.
+Yeh example fictional hai. Asli student ki details docs ya ticket mein na likhein.
 
-If anything is ambiguous, read the profiles, compare the matcher reasons, and
-if still unsure: **reject with a note**. A missed match can be re-proposed
-later; a wrong match cannot be un-announced.
+1. Aman ne crush entry mein **Riya Sharmaa** likha, roll number khali chhoda, aur
+   **ABC College, BCA, Year 2, Section A** chuna.
+2. Admin ko candidate milta hai: **Riya Sharma, roll 23BCA102, ABC College, BCA,
+   Year 2, Section A**.
+3. Naam bilkul same nahi hai aur roll number bhi student ne nahi diya, isliye
+   system ne apne aap link nahi kiya. Yeh sahi behaviour hai.
+4. Aap college ki class list se check karte ho ki yeh wahi Riya hai.
+5. Identity candidate page par us row ka checkbox tick karein, phir
+   **Confirm selected identity candidates** action chunein.
+6. Riya ne bhi Aman ke liye entry ki hai, jisme Aman ka roll number **23BCA101**
+   sahi hai. Woh side system khud confirm kar leta hai.
+7. Ab match proposal page par yeh jodi dikhegi. Aap dono ki details check karke
+   approve karein.
+8. Dono students ko sirf ek simple alert jayega: "someone you chose also chose
+   you." Riya ke candidate hone ki detail, roll number ya evidence Aman ko kabhi
+   na batayein.
 
-### 4.3 What approval and rejection actually do
+Agar candidate galat nikle to reject karein. Agar do log possible hain to defer
+karein. Agar koi bhi safe tarike se identify na ho to **Mark unresolvable** karein.
+In teeno mein se kisi bhi case mein match ya alert nahi banta.
 
-Approving:
+### 4.2 Match proposals approve karein
 
-- Creates one `MutualMatch` for the pair (or reuses an existing one).
-- Marks **both** proposal halves `approved` and records `verified_by`,
-  `verified_at` and your note.
-- Sends exactly one in-app notification and one email to each student, and only
-  if this approval is what created the match. Re-approval never re-notifies.
-- Does **not** reveal names yet. Reveal needs both students to consent.
+**Kab:** roz, aur kisi event ya promotion se pehle.
 
-Rejecting:
+**Kyun:** proposal ka matlab "shayad match hai" hota hai. Match tabhi banta hai
+jab aap approve karte ho. Late approval se feature toota hua lagta hai.
 
-- Marks both proposal halves `rejected` with your note.
-- Sends nothing to either student.
-- Permanently closes the pair; the matcher will not re-create it.
+**Real page:**
+<https://whoismycrush.com/802134admin/campus/potentialmatch/>
 
-### 4.4 The unpaired list
+1. Filter se **Status** = **Pending Verification** chunein.
+2. Ek row kholein. Har row ek taraf ki entry hai. Sahi jodi mein do rows hoti
+   hain, ek har student ki taraf se.
+3. Column **Is reciprocal** check karein. Agar **No** hai to yeh ek taraf ki
+   entry hai. Aise row ko approve na karein; system use skip kar dega.
+4. Neeche diya checklist poora check karein.
+5. Ek jodi ki sirf **ek row** select karein. Dono rows select karne ki zaroorat
+   nahi. Ek row approve karne se poori jodi approve hoti hai.
+6. **Action** dropdown se
+   **Approve selected (creates mutual crush + notifies)** chunein aur **Go**
+   dabayein.
+7. Page par confirmation message dekhein. Agar likha ho "skipped", to reason
+   samajhne ke liye row phir kholein. Aksar identity resolve nahi hoti ya doosri
+   taraf ki entry missing hoti hai.
+8. Agar match galat hai to **Reject selected (nobody is notified)** chunein.
+   Isse poori jodi band ho jati hai aur kisi ko alert nahi jata.
 
-`/staff/matches/` also shows one-sided entries under **One-sided entries**.
-They are informational only: the other person has not entered them back, so
-there is nothing to approve. Do not try to force them. They become a real pair
-only when the other student seals a reciprocal entry.
+**Approve karne se pehle checklist:**
 
-### 4.5 Reports queue
+- [ ] Dono students **same college** ke hain.
+- [ ] Dono entries registered students se sahi linked hain.
+- [ ] Dono taraf ki entry maujood hai. Ek taraf ki entry approve nahi hoti.
+- [ ] Type kiya hua naam usi student ka lagta hai. Spelling alag ho sakti hai,
+      lekin naam ya surname bilkul alag nahi hona chahiye.
+- [ ] Course, year aur section mein koi bada contradiction nahi hai.
+- [ ] Dono accounts active hain.
+- [ ] Dono ke beech koi block nahi hai.
+- [ ] Koi duplicate profile ya duplicate college involved nahi hai.
 
-**When:** daily; immediately for harassment or a safety report.
+Agar kuch bhi confusing ho to approve na karein. Reject karne se match
+permanently band hota hai. Baad mein naya proposal nahi banega, isliye reject
+sirf tab karein jab aapko pakka ho.
 
-**Why:** reports are the only student-facing safety channel, and the public
-site promises they are reviewed.
+**Approve karne par kya hota hai:**
 
-1. Open `/admin/campus/report/?status__exact=open`.
-2. Read `reason` and `detail`. Treat the reporter's identity as confidential.
-3. Open the reported student's profile and recent activity.
-4. Decide:
-   - Wrong person / typo: correct the offending entry or mark it inactive if
-     appropriate.
-   - Fake or impersonating profile: deactivate the underlying `User`
-     (`/admin/auth/user/`), do not delete history unless policy requires it.
-   - Harassment or inappropriate content: deactivate the account; add a
-     `Block` if needed; preserve evidence.
-   - Duplicate campus identity: deactivate the duplicate profile, keep the
-     verified one.
-   - Not a violation: dismiss.
-5. Use **Mark reviewed** or **Dismiss** so the queue reflects the decision.
-6. If you took an account action, note what and why somewhere the team keeps
-   incident records.
+- Ek real mutual match banta hai.
+- Dono students ko ek simple in-app alert jata hai.
+- Email bhi ja sakta hai, agar setting on hai.
+- Kisi ka naam, roll number ya "kisne pehle chuna" reveal nahi hota.
+- Naam tabhi khulta hai jab dono students reveal ke liye haan kahein.
 
-The admin `Block` form only inserts a row. It does **not** run the cleanup the
-in-product block button runs (retiring entries, deleting pending proposals,
-closing matches). Prefer the student-facing block flow. If you must add a block
-in admin, also clean the related `PotentialMatch` / `MutualMatch` rows manually.
+**Reject karne par kya hota hai:**
 
-### 4.6 Email verification requests
+- Poori jodi reject ho jati hai.
+- Kisi student ko koi alert nahi jata.
+- Wahi jodi dobara apne aap propose nahi hoti.
 
-**When:** when a student says "I never got the link", or before enabling
-`EMAIL_VERIFICATION_REQUIRED`.
+Admin list mein status ko haath se **Approved** na karein. Sirf approve/reject
+actions use karein. Isse notification, audit aur duplicate safety sahi rehti hai.
 
-**Why:** this flag controls *account email* confirmation, which affects login
-and match-alert deliverability.
+### 4.3 Reports dekhein
 
-1. Ask the student to use **Resend verification** on the banner first.
-2. Check `/admin/accounts/emailverification/` and search their email/username.
-3. Confirm you are talking to the account owner (reply to the account email).
-4. Select the row and run **Mark selected emails verified**, or open the row and
-   set `verified_at`.
+**Kab:** roz. Harassment ya safety report ho to turant.
 
-Do not confuse the two verification concepts:
+**Kyun:** report student ki safety ka main rasta hai. Website promise karti hai
+ki report review hogi.
 
-| Field | Means | Effect |
+**Real page:**
+<https://whoismycrush.com/802134admin/campus/report/?status__exact=open>
+
+1. Report kholein aur reason aur detail padhein.
+2. Reporter ki identity confidential rakhein.
+3. Reported student ka profile aur recent activity dekhein.
+4. Decision lein:
+   - Galat naam ya typo: entry theek karein ya inactive karein.
+   - Fake profile: us user ka account deactivate karein.
+   - Harassment: account deactivate karein; zaroorat ho to block lagayein;
+     evidence sambhal kar rakhein.
+   - Duplicate profile: duplicate account band karein, sahi profile rakhein.
+   - Koi violation nahi: dismiss karein.
+5. **Mark reviewed** ya **Dismiss** action use karein.
+6. Account par action liya ho to apne incident record mein likhein: kab, kis
+   account par, aur kyun.
+
+**Block ka important rule:** admin ke Block page se sirf ek block row banti hai.
+Student ke apne block button jaisa cleanup apne aap nahi hota. Isliye normal
+block ke liye student-facing button use karein. Admin se block lagana zaroori ho
+to related pending proposals aur matches bhi manually check karein.
+
+### 4.4 Contact messages dekhein
+
+Public contact form ke messages admin control room mein save hote hain.
+
+**Real page:**
+<https://whoismycrush.com/802134admin/contact/contactmessage/>
+
+1. Filter se **Status** = **Pending** chunein.
+2. Message kholein aur padhein.
+3. Official support email se reply karein, apne personal email se nahi.
+4. Reply ke baad **Mark selected messages as resolved** action chunein.
+
+Kisi doosre student ki private information reply mein na likhein.
+
+### 4.5 Email verification requests
+
+**Kab:** jab student kahe "verification link nahi aaya", ya email verification
+on karne se pehle.
+
+**Real page:**
+<https://whoismycrush.com/802134admin/accounts/emailverification/>
+
+1. Pehle student ko website ke banner se **Resend verification** karne ko kahein.
+2. Page par student ka email ya username search karein.
+3. Confirm karein ki aap usi account ke owner se baat kar rahe hain. Official
+   account email par reply karein.
+4. Row select karein aur **Mark selected emails verified** action chunein. Ya row
+   kholein aur verification date/time set karein.
+
+Do alag cheezein confuse na karein:
+
+| Field | Simple matlab | Asar |
 | --- | --- | --- |
-| `EmailVerification.verified_at` | The account's email address was confirmed | Removes the banner; matters when email verification is enforced |
-| `StudentProfile.is_verified` | Editorial trust badge on the campus identity | Display/review aid only; it does not currently gate matching |
-
-### 4.7 Contact inbox
-
-The public contact form saves to **Contact messages** in `/admin/` (app
-`contact`). Filter by status `Pending`, open the message, reply by email and
-then mark it `Resolved` (single edit or the bulk action). Check the queue daily.
-Reply from the official support address, never from a personal one, and never
-include another student's information.
+| Email verification date | Account ka email confirm hua | Banner hat jata hai; email verification on ho to login ke liye zaroori. |
+| Profile verified tick | Profile par trust badge | Sirf dikhane aur review ke liye. Yeh match ko block nahi karta. |
 
 ---
 
 ## 5. Weekly routine
 
-### 5.1 Review new student identities
+### 5.1 New student profiles check karein
 
-**When:** once a week, or when the campus is growing quickly.
+**Real page:**
+<https://whoismycrush.com/802134admin/campus/studentprofile/>
 
-**Why:** campus + roll number is the identity gate. Bad identities create bad
-matches.
+- Filter se **Is verified = No**, college aur recent signups dekhein.
+- Naam, roll number format, duplicate naam aur fake profiles check karein.
+- Sirf pakka hone par **Is verified** tick karein. Yeh ek trust badge hai, lock
+  nahi.
+- Match theek karne ke liye roll number ya naam edit na karein. Isse purani
+  entries aur proposals galat ho sakti hain.
+- Ek hi student ke do profiles hon to duplicate account deactivate karein.
+  History ko blindly delete na karein.
 
-In `/admin/campus/studentprofile/`:
+### 5.2 Colleges clean rakhein
 
-- Filter by `is_verified = No`, `college`, and recent signups.
-- Check roll format against the campus convention, duplicate-looking names and
-  obviously fake profiles.
-- Set `is_verified` only after you are confident. It is a badge, not a lock.
-- Never edit a roll number to "fix" a match. A roll change can silently
-  invalidate existing entries and proposals.
-- If two profiles claim the same person, deactivate the duplicate account;
-  never merge by deleting history blindly.
+**Real page:**
+<https://whoismycrush.com/802134admin/campus/college/>
 
-### 5.2 Campus hygiene
+- Ek asli college ke liye ek hi row rakhein. Duplicate rows matching pool ko
+  todti hain.
+- College band karna ho to **Is active** untick karein. Delete na karein.
+- `slug` (URL ka last part) share hone ke baad change na karein. Warna college
+  page aur join page ke links toot jayenge.
+- Purane students aur entries hone par college delete nahi hota. Isliye inactive
+  karein.
 
-In `/admin/campus/college/`:
+### 5.3 College invite requests dekhein
 
-- There is no separate campus-approval queue. Decide duplicates deliberately
-  with `is_active`.
-- Keep one canonical row per real campus. Duplicates split the matching pool.
-- `is_active = False` hides the campus from the picker and its landing page
-  404s, but existing students keep working. Use this instead of deleting.
-- Do not change `slug` after the campus has been shared: `/college/<slug>/` and
-  `/join/<slug>/` links will break.
-- Deletion is protected while profiles/entries reference the campus. Deactivate
-  rather than delete unless you are certain.
+**Real page:**
+<https://whoismycrush.com/802134admin/campus/collegeinvite/>
 
-### 5.3 College invite queue
+Yahan students ki "mera college add karo" requests hoti hain. Status sirf
+tracking ke liye hai; status badalne se kisi ko email nahi jata.
 
-`/admin/campus/collegeinvite/` records "please add/nudge my campus" requests.
-The status field is a tracking tool only; changing it sends no email.
+- Pending = abhi dekha nahi.
+- Approved = college add ho gaya.
+- Declined = college add nahi hoga.
 
-- `pending` — not acted on.
-- `approved` — campus exists or was added.
-- `declined` — cannot/should not add it.
+Queue weekly clear karein, taaki demand ka sahi pata chale.
 
-Clear the queue weekly so growth decisions are based on real demand.
+### 5.4 Pro Tips check karein
 
-### 5.4 Pro Tips review
+**Real page:**
+<https://whoismycrush.com/802134admin/blog/post/>
 
-In `/admin/blog/post/`:
+- Drafts, future-dated posts aur scheduled posts dekhein. Future date wala post
+  us time tak hidden rehta hai.
+- **Featured** posts kam rakhein, sirf useful guides ke liye.
+- Title, excerpt, cover image aur category proofread karein.
+- Links aur images check karein.
+- Purana ya galat post delete karne ke bajaye **Is published** untick karein.
+  Legal ya security reason ho to hi delete karein.
 
-- Check the publishing calendar: drafts, future-dated posts and scheduled
-  posts. A future `published_at` stays hidden until that time.
-- Keep the **Featured** set small and genuinely useful (the launch content uses
-  three).
-- Proofread title, excerpt, cover image and category.
-- Verify links and inline images still load.
-- Unpublish anything outdated or inaccurate instead of deleting it, unless
-  there is a legal reason to remove it.
+### 5.5 Backup aur email check
 
-### 5.5 Backups and deliverability
-
-- Confirm the database and `MEDIA_ROOT` backups ran and are recent.
-- Run `python manage.py check_email --to you@example.com` after any mail or
-  hosting change, and spot-check once a week.
-- Watch the `config.mail` log line for delivery failures. In-app notifications
-  are written even when email fails, so a silent mail outage is easy to miss.
-- Run `python manage.py check` after configuration changes.
+- Database (data ki jagah) aur `MEDIA_ROOT` (uploaded images/files ki jagah) ka
+  fresh backup check karein.
+- Mail ya hosting change ke baad test email chalayein:
+  `python manage.py check_email --to noreply@whoismycrush.com`
+  Test ke liye apna working address use karna behtar hai.
+- Email fail ho raha ho to email log dekhein. In-app alerts email fail hone par
+  bhi save hote hain, isliye email outage chhup sakta hai.
+- Setting change ke baad `python manage.py check` chalayein. Yeh command
+  configuration ki galtiyan batati hai.
 
 ---
 
@@ -311,400 +416,476 @@ In `/admin/blog/post/`:
 
 ### Monthly
 
-- **Re-run the matcher** after imports, bulk profile edits, or a suspected
-  missed pair:
+- **Matcher dobara chalayein** agar import, ek saath bahut profile edits, ya
+  match miss hone ka shak ho:
+
   ```powershell
   python manage.py shell -c "from campus.services import reconcile_all_matches; print(reconcile_all_matches())"
   ```
-  This only queues proposals. It never approves or notifies anyone.
-- **Prune broken matches** only after a backup, and only if you know why they
-  are broken:
+
+  `shell` ka matlab: server ke andar chhota Python command chalana. Yeh command
+  sirf naye proposals banata hai. Kisi ko approve ya notify nahi karta.
+
+- **Tooti matches saaf karein** sirf backup ke baad, aur sirf jab reason pata
+  ho:
+
   ```powershell
   python manage.py shell -c "from campus.services import prune_broken_matches; print(prune_broken_matches())"
   ```
-  This deletes `MutualMatch` rows that have no approved proposal and a rejected
-  reciprocal proposal. It does not delete notifications.
-- Review staff accounts: remove access from people who no longer need it.
-  Deactivate, do not delete, so the audit trail survives.
-- Run the test suite: `python manage.py test`.
-- Check `/sitemap.xml` and `/robots.txt` return 200 and use the real domain.
-- Skim the growth numbers: active students per campus, matches per campus per
-  week, reveal consent rate, reports backlog. Aggregate counts only; never
-  surveil an individual student.
+
+  Yeh un match records ko delete karta hai jinka koi approved proposal nahi hai
+  aur doosri taraf reject ho chuki hai. Notifications delete nahi hoti.
+
+- `python manage.py test` chalayein. Yeh automatic test hai jo batata hai ki
+  website ka main kaam toota nahi.
+- `https://whoismycrush.com/sitemap.xml` aur
+  `https://whoismycrush.com/robots.txt` khulkar check karein.
+- Total numbers dekhein: kitne active students, kitne matches, kitni reports
+  pending. Kisi ek student ki activity spy na karein.
+- Apna admin password aur recovery email check karein. Sirf ek admin account
+  rakhein.
 
 ### Quarterly
 
-- Restore a backup into a staging environment and verify it works. An untested
-  backup is a guess.
-- Rotate secrets that may have been exposed; rotate the `SECRET_KEY` only with
-  the understanding that it logs every session out.
-- Update dependencies in a staging environment, then deploy.
-- Audit content for stale claims, broken links and outdated screenshots.
+- Backup ko test server par restore karke check karein ki woh kaam karta hai.
+  Bina test kiya backup sirf ek guess hai.
+- Password aur secret keys badal kar naye banayein. Secret key badalne se sab
+  users log out ho jate hain.
+- Supporting software update karein. Pehle test server par, phir live site par.
+- Purane articles, links aur screenshots check karein.
 
 ---
 
-## 7. Model-by-model admin reference
+## 7. Admin pages reference
 
-### College (`/admin/campus/college/`)
+Har page ka real URL diya hai. `Model` ka matlab yahan "data ka section" hai.
 
-| | |
-| --- | --- |
-| **When** | A new campus must be added, a duplicate cleaned up, or a campus should stop appearing. |
-| **Why** | Campus is the hard boundary. Cross-campus matching is never allowed. |
-| **Do** | Keep name/city/state accurate, leave `slug` alone after sharing, set `is_active` instead of deleting. |
-| **Don't** | Merge two real campuses because they look similar. Do not delete a campus with history. |
+### College
 
-### StudentProfile (`/admin/campus/studentprofile/`)
+<https://whoismycrush.com/802134admin/campus/college/>
 
-| | |
-| --- | --- |
-| **When** | Weekly verification, a report investigation, or a duplicate. |
-| **Why** | This is the only identity the matcher trusts, combined with the roll number. |
-| **Do** | Verify against the campus convention; deactivate the underlying user for fakes. |
-| **Don't** | Edit roll numbers/names to "make a match work". Do not assume `is_verified` blocks matching; it does not. |
+- **Kab:** naya college add karna ho, duplicate clean karna ho, ya college hide
+  karna ho.
+- **Kyun:** college matching ki hard limit hai. Do college ke students kabhi
+  match nahi hote.
+- **Karein:** naam, city aur state sahi rakhein. Share hone ke baad `slug` na
+  badlein. Delete ke bajaye **Is active** untick karein.
+- **Na karein:** do asli colleges ko similar dikhne par merge na karein.
 
-`is_verified` is editable directly in the list, which is convenient for bulk
-review. Make sure the list is filtered correctly before saving.
+### Student profile
 
-### CrushEntry (`/admin/campus/crushentry/`)
+<https://whoismycrush.com/802134admin/campus/studentprofile/>
 
-| | |
-| --- | --- |
-| **When** | Debugging a specific match, handling a wrong-person report, or auditing a proposal. |
-| **Why** | It stores what a student typed by hand, including the internal priority. |
-| **Do** | Read the minimum needed. Mark `is_active` false only when the student asks or a report requires it. |
-| **Don't** | Expose, screenshot, copy or discuss `priority`. Never change `priority` casually (it is unique per student). Never edit someone's entry to force a match. |
+- **Kab:** weekly check, report investigation ya duplicate profile.
+- **Kyun:** matcher isi profile aur roll number par bharosa karta hai.
+- **Karein:** campus rules se verify karein. Fake profile ka user account
+  deactivate karein.
+- **Na karein:** match banane ke liye naam ya roll number edit na karein.
+  `Is verified` ko matching lock na samjhein; yeh sirf badge hai.
 
-Priority is 1-3 and must never appear in a student-facing template, email,
-notification or support reply. The review desk shows it to the verifier only
-because the verifier is checking the submission.
+### Crush entry
 
-### PotentialMatch (`/admin/campus/potentialmatch/`)
+<https://whoismycrush.com/802134admin/campus/crushentry/>
 
-| | |
-| --- | --- |
-| **When** | This is the review queue. |
-| **Why** | It is the only path from "someone typed a name" to an announced match. |
-| **Do** | Use `/staff/matches/<id>/`, or the Approve/Reject actions if you must. Record notes. |
-| **Don't** | Change `status`, `verified_by` or `mutual_match` by hand. Do not approve unpaired rows. Do not bulk-approve without checking every pair. |
+- **Kab:** match debug, wrong-person report, ya proposal audit.
+- **Kyun:** yahan student ne jo naam type kiya woh save hota hai. Isme internal
+  priority aur admin-only identity state bhi hoti hai.
+- **Karein:** ambiguous identity ke liye identity candidate page use karein.
+  Entry ko inactive sirf student request ya report par karein.
+- **Na karein:** `priority`, candidate evidence ya resolved link ko expose na
+  karein. Match banane ke liye entry edit na karein. Resolved fields haath se
+  na badlein; admin actions use karein.
 
-The confidence score is advisory. It is built from name similarity (40), course
-(20), year (15), section (10), department (8) and nickname (7); the identity
-gate is always campus + normalized roll. A high score is not proof; a hard
-course/year/section contradiction disqualifies a pair outright.
+Priority 1 se 3 tak hoti hai. Yeh student ko kabhi na dikhe, na support reply
+mein likhein.
 
-### MutualMatch (`/admin/campus/mutualmatch/`)
+### Identity candidate
 
-| | |
-| --- | --- |
-| **When** | Closing a match after a report/block, or auditing an approved match. |
-| **Why** | Matching is sensitive; closure must be deliberate. |
-| **Do** | Use **Close selected matches** for a clean closure. It changes status only and notifies nobody. |
-| **Don't** | Set `status = revealed` by hand; that bypasses the two-sided consent flow. Do not delete a match row to "undo" an approval; close it and record the reason. |
+<https://whoismycrush.com/802134admin/campus/identitycandidate/>
 
-Statuses: `mutual` (approved, nobody has chosen reveal), `reveal_pending` (one
-side chose reveal), `revealed` (both consented), `closed`. `user_a_consented`
-and `user_b_consented` belong to the students, not the admin.
+- **Kab:** roll number missing ya ambiguous ho, ek jaise naam hon, ya student
+  apna campus ID theek kare.
+- **Kyun:** yeh possible identity ka evidence hai. Yeh match nahi hai.
+- **Karein:** candidate kholein, details compare karein, phir **Confirm**,
+  **Reject** ya **Defer** action chunein.
+- **Na karein:** sirf naam dekhkar confirm na karein. Har row khole bina ek saath
+  confirm na karein. Candidate detail student ko na batayein.
 
-### Report (`/admin/campus/report/`)
+Rejected aur deferred candidates apne aap dobara link nahi hote. Identity audit
+log sirf padhne ke liye hai, matlab purani entries badli nahi ja sakti.
 
-| | |
-| --- | --- |
-| **When** | Daily. |
-| **Why** | Safety and trust; the site promises reports are reviewed. |
-| **Do** | Investigate, take account action when warranted, then mark reviewed or dismissed. |
-| **Don't** | Reveal the reporter to the reported student. Do not dismiss without reading. |
+### Identity audit log
 
-### Block (`/admin/campus/block/`)
+<https://whoismycrush.com/802134admin/campus/identityresolutionaudit/>
 
-| | |
-| --- | --- |
-| **When** | A student requests it outside the normal flow, or as part of an investigation. |
-| **Why** | Blocking severs matching between two identities. |
-| **Do** | Prefer the student-facing block action, which also cleans entries, proposals and matches. |
-| **Don't** | Treat an admin-created row as complete: the admin form does no cleanup. |
+Yeh sirf padhne ke liye record hai. Isme dikhta hai kis entry par, kab, kis
+admin ne kya action liya. Isse edit ya delete na karein.
 
-### CollegeInvite (`/admin/campus/collegeinvite/`)
+### Potential match (match proposals)
 
-| | |
-| --- | --- |
-| **When** | Weekly queue review. |
-| **Why** | It shows real demand for missing campuses. |
-| **Do** | Set `approved` once the campus exists, `declined` when it will not be added. |
-| **Don't** | Expect changing status to email anyone; it does not. |
+<https://whoismycrush.com/802134admin/campus/potentialmatch/>
 
-### Notification (`/admin/campus/notification/`)
+- **Kab:** daily review.
+- **Kyun:** yeh "kisi ne naam type kiya" se "match announce hua" tak ka safe
+  rasta hai.
+- **Karein:** ek jodi ki ek row select karein, checklist check karein, phir
+  **Approve selected** ya **Reject selected** action chunein.
+- **Na karein:** status, approve karne wale ka naam ya linked match haath se na
+  badlein. Unpaired row approve na karein. Bina check kiye ek saath approve na
+  karein.
 
-| | |
-| --- | --- |
-| **When** | Debugging "I got an alert" or correcting a bad send. |
-| **Why** | Notifications must stay vague; a leak here exposes the whole secret. |
-| **Do** | Keep messages generic ("Someone you secretly selected also selected you."). |
-| **Don't** | Edit a message to include a name, roll number, priority or list position. |
+Confidence score (match ka score) sirf hint hai, proof nahi. Score naam, course,
+year, section, department aur nickname se banta hai. High score ke baad bhi
+aapko details check karni hongi. Course/year/section ka bada contradiction ho to
+pair galat hai. Notification ek hi baar jata hai, chahe aap dobara approve karein.
 
-### Rose (`/admin/campus/rose/`)
+### Mutual match (approved matches)
 
-Existing in the data model, **dormant in the product**: there is no purchase
-flow, no gateway and no refund process. Do not promise roses to students or
-mark payments as paid manually. Leave rows untouched until a real payment story
-is shipped.
+<https://whoismycrush.com/802134admin/campus/mutualmatch/>
 
-### EmailVerification (`/admin/accounts/emailverification/`)
+- **Kab:** report ya block ke baad match band karna ho, ya approved match audit
+  karna ho.
+- **Kyun:** match sensitive hai; band karna soch samajh kar karein.
+- **Karein:** **Close selected matches** action use karein. Yeh sirf status
+  badalta hai aur kisi ko notify nahi karta.
+- **Na karein:** Revealed status haath se set na karein. Yeh dono students ki
+  permission ka rasta bypass kar deta hai. Match delete karke approval undo na
+  karein; close karein aur reason record karein.
 
-| | |
-| --- | --- |
-| **When** | "The link never arrived" / verification support. |
-| **Why** | It controls account email confirmation, not campus identity. |
-| **Do** | Ask the student to resend first; manually verify only after ownership is confirmed. |
-| **Don't** | Mark a whole list verified to clear a queue. |
+Status ka matlab:
 
-### Category and Post (`/admin/blog/category/`, `/admin/blog/post/`)
+- Mutual = approved match, abhi naam nahi khula.
+- Reveal pending = ek student ne reveal maanga hai.
+- Revealed = dono ne permission di, naam khul gaye.
+- Closed = match band.
 
-See the Pro Tips workflow below.
+Reveal ki permission students dete hain, admin nahi.
 
-### User and Group (`/admin/auth/user/`, `/admin/auth/group/`)
+### Report
 
-| | |
-| --- | --- |
-| **When** | Staff onboarding/offboarding, fake account deactivation. |
-| **Why** | Access control and the audit trail. |
-| **Do** | Deactivate (`is_active = False`) instead of deleting staff. Use groups for repeatable permissions. |
-| **Don't** | Grant superuser for convenience. Never edit a user's password on their behalf without a reset. |
+<https://whoismycrush.com/802134admin/campus/report/>
+
+- **Kab:** daily.
+- **Kyun:** safety aur trust.
+- **Karein:** investigate karein, action lein, phir **Mark reviewed** ya
+  **Dismiss** karein.
+- **Na karein:** reporter ki identity reported student ko na batayein. Bina
+  padhe dismiss na karein.
+
+### Block
+
+<https://whoismycrush.com/802134admin/campus/block/>
+
+- **Kab:** student normal block flow use na kar sake, ya investigation ke liye.
+- **Kyun:** block do students ke beech matching band karta hai.
+- **Karein:** normal block ke liye student-facing button use karein. Woh entries,
+  proposals aur matches bhi clean karta hai.
+- **Na karein:** admin se banayi block row ko complete na samjhein. Usme cleanup
+  apne aap nahi hota.
+
+### College invite
+
+<https://whoismycrush.com/802134admin/campus/collegeinvite/>
+
+- **Kab:** weekly.
+- **Kyun:** naye college ki asli demand dikhati hai.
+- **Karein:** college ban jaye to Approved, na bane to Declined karein.
+- **Na karein:** status badalne se email jane ki umeed na karein; aisa nahi hota.
+
+### Notification
+
+<https://whoismycrush.com/802134admin/campus/notification/>
+
+- **Kab:** "mujhe alert aaya" debug karna ho, ya galat alert check karna ho.
+- **Kyun:** notification vague rehna chahiye. Yahan leak hua to poora secret khul
+  jayega.
+- **Karein:** message generic rakhein: "Someone you secretly selected also
+  selected you."
+- **Na karein:** message mein naam, roll number, priority ya list position na
+  daalein.
+
+### Rose
+
+<https://whoismycrush.com/802134admin/campus/rose/>
+
+Rose ka data section system mein bana hua hai, lekin product mein **abhi live
+nahi** hai. Koi purchase, payment ya refund flow nahi hai. Students ko rose
+promise na karein aur payment manually paid mark na karein. Jab tak asli payment
+system na aaye, rows ko chhode rakhein.
+
+### Email verification
+
+<https://whoismycrush.com/802134admin/accounts/emailverification/>
+
+- **Kab:** "link nahi aaya" support, ya email verification on karne se pehle.
+- **Kyun:** yeh account email confirm karta hai, campus identity nahi.
+- **Karein:** pehle resend karwayein. Ownership confirm hone ke baad hi manually
+  verify karein.
+- **Na karein:** queue clear karne ke liye poori list verify na karein.
+
+### Blog category and post
+
+<https://whoismycrush.com/802134admin/blog/category/>
+
+<https://whoismycrush.com/802134admin/blog/post/>
+
+Pro Tips likhne ke liye neeche workflow dekhein.
+
+### User (student and admin accounts)
+
+<https://whoismycrush.com/802134admin/auth/user/>
+
+- **Kab:** fake student account band karna ho, ya apna admin account check karna
+  ho.
+- **Kyun:** access aur audit record.
+- **Karein:** account band karna ho to **Is active** untick karein.
+- **Na karein:** admin account delete na karein; audit trail toot jayegi. Doosra
+  admin account na banayein.
 
 ---
 
 ## 8. Pro Tips workflow
 
-### Create a category
+### Naya category banayein
 
-`/admin/blog/category/add/`
+<https://whoismycrush.com/802134admin/blog/category/add/>
 
-- `name` — short, public-facing.
-- `slug` — auto-filled from the name; changing it breaks existing archives.
-- `description` — one line shown above the archive.
-- `accent` — yellow, pink, blue, green or red.
-- `order` — lower appears first; editable in the list.
+- `name` = public category ka naam.
+- `slug` = URL ka last part. Naam se apne aap banta hai; publish ke baad na
+  badlein.
+- `description` = archive ke upar ek line.
+- `accent` = yellow, pink, blue, green ya red.
+- `order` = chhota number pehle dikhta hai.
 
-### Create or edit a post
+### Post banayein ya edit karein
 
-`/admin/blog/post/add/`
+<https://whoismycrush.com/802134admin/blog/post/add/>
 
-1. **Title** — clear, specific, no clickbait.
-2. **Slug** — auto-filled; keep it stable once published.
-3. **Category** — required for a good archive; may be empty, but avoid it.
-4. **Author name** — defaults to WhoIsMyCrush; use a real byline only with
-   consent.
-5. **Excerpt** — one or two sentences, max 320 characters. This is the index
-   and search result text.
-6. **Cover image** — optional, JPG/PNG/WEBP/GIF, max 5 MB. It is converted to
-   WebP automatically and the old file is removed.
-7. **Body** — CKEditor rich text. The public site sanitizes it at render time,
-   so scripts/iframes/event handlers are stripped. Do not rely on raw HTML.
-8. **Featured** — only for genuinely important guides; keep the set small.
-9. **Publishing** — tick `is_published`. If `published_at` is empty it is set
-   to now; set it in the future to schedule. The server runs in UTC, so convert
-   your local time before scheduling.
-10. **SEO** — `seo_title`, `meta_description`, `canonical_url`. Leave canonical
-    empty unless this content is a duplicate of another URL.
-11. **Save**, then open the public post and check it on desktop and mobile.
+1. **Title** clear aur specific rakhein. Clickbait na karein.
+2. **Slug** apne aap banta hai. Publish ke baad stable rakhein.
+3. **Category** chunein.
+4. **Author name** default WhoIsMyCrush rehta hai. Asli naam sirf permission ke
+   baad use karein.
+5. **Excerpt** ek-do line, 320 characters tak. Yeh index aur search mein dikhta
+   hai.
+6. **Cover image** optional hai. JPG, PNG, WEBP ya GIF, 5 MB tak. System ise
+   WebP mein badal deta hai aur purani file hata deta hai.
+7. **Body** formatting editor mein likhein. Public site script aur bahar ka
+   embedded box hata deti hai, isliye raw HTML par bharosa na karein.
+8. **Featured** sirf important guides ke liye tick karein.
+9. **Publishing:** **Is published** tick karein. Publish date khali ho to abhi
+   ka time lagta hai. Future time daal kar schedule kar sakte hain. Server UTC
+   time use karta hai, isliye local time ko UTC mein badal kar daalein.
+10. **SEO:** SEO title, search description aur canonical URL bharein. Canonical
+    URL sirf duplicate content ke liye hai; warna khali chhodein.
+11. **Save** karein, phir public post desktop aur mobile par check karein.
 
-Inline images use the same staff-only upload endpoint and the same 5 MB/type
-limits. If the editor toolbar or uploads 404 after deploy, run
-`collectstatic`.
+**Publishing checklist:**
 
-### Publishing checklist
+- [ ] Title aur excerpt natural padh rahe hain.
+- [ ] Cover image sahi size aur 5 MB se kam hai.
+- [ ] Headings heading style se banayi hain, bold paragraph se nahi.
+- [ ] Links sahi page par ja rahe hain.
+- [ ] Koi private student info, screenshot ya asli naam nahi hai.
+- [ ] SEO title aur description likhe hain.
+- [ ] Post sahi category mein hai.
+- [ ] Mobile par preview check kiya.
+- [ ] **Is published** aur publish date sahi hain.
 
-- [ ] Title and excerpt read naturally.
-- [ ] Cover is the right aspect ratio and under 5 MB.
-- [ ] Headings use the editor's heading styles (h2/h3), not bold paragraphs.
-- [ ] Links open the intended page.
-- [ ] No private student information, screenshots or real names.
-- [ ] SEO title and description are written, not left as accidental defaults.
-- [ ] Post is in the right category.
-- [ ] Previewed on mobile.
-- [ ] `is_published` and `published_at` are correct.
-
-To take a post down, untick `is_published` and save. This keeps the row and
-slug so it can be republished later; the public URL returns 404 while it is
-unpublished. Delete only for legal or security reasons.
+Post hatana ho to **Is published** untick karein. Row aur slug rehte hain, isliye
+baad mein republish kar sakte hain. Public URL tab 404 dega. Delete sirf legal ya
+security reason par karein.
 
 ---
 
 ## 9. Email and notification rules
 
-What the system sends:
+System kya bhejta hai:
 
-| Trigger | Recipient | Channel | Content |
+| Kab | Kisko | Rasta | Content |
 | --- | --- | --- | --- |
-| Account sign-up / resend | Account email | Email | Confirmation link |
-| Match approved | Both students | In-app + email (if enabled) | "Someone you secretly selected also selected you." |
-| Reveal chosen by one side | The other side | In-app | "Your mutual crush chose to reveal. Open to finish." |
-| Report / block | Nobody | None automatic | Admin acts manually through the report queue |
-| Contact form | Admin — Contact messages | Database | Name/email/message/topic/status |
+| Signup / resend | Account email | Email | Confirmation link |
+| Match approved | Dono students | In-app + email (agar on hai) | "Someone you secretly selected also selected you." |
+| Ek student reveal maange | Doosra student | In-app | "Your mutual crush chose to reveal. Open to finish." |
+| Report / block | Kisi ko nahi | Kuch nahi | Admin report page se action leta hai |
+| Contact form | Admin | Contact messages | Name, email, message, topic, status |
 
-Non-negotiable rules:
+**Kabhi na karein:**
 
-- Never add a name, roll number, priority, list position or "who liked first"
-  to a notification or email.
-- Never email a student to say they were entered as a crush. That is the exact
-  secret the product protects.
-- A match email is sent only from the approval service, only once per pair, and
-  only while `MATCH_EMAILS_ENABLED` is on. The in-app notification is always
-  written, so a mail outage never hides a match.
-- Do not send a manual "congratulations" email. Use the product flow.
+- Notification ya email mein naam, roll number, priority, list position ya
+  "kisne pehle chuna" na daalein.
+- Student ko email karke na batayein ki kisi ne use crush entry mein likha tha.
+  Yeh product ka sabse bada secret hai.
+- Match email sirf approval ke baad, ek pair ke liye ek baar, aur
+  `MATCH_EMAILS_ENABLED` on hone par jata hai. In-app alert hamesha save hota hai.
+- Manual "congratulations" email na bhejein. Product flow use karein.
 
-If students report missing emails, run `check_email` before changing anything.
-For Gmail, `EMAIL_HOST_PASSWORD` must be an app password, not the account
-password.
+Email miss ho rahi ho to pehle `check_email` chalayein. Gmail use kar rahe hain to
+Email bhejne ke password ki setting mein account password nahi, app password
+daalein.
 
 ---
 
 ## 10. Maintenance commands
 
-Run from the project root with the virtual environment active.
+Yeh commands project folder se, virtual environment on karke chalayein.
+`Terminal` = black command window. `Virtual environment` = project ki alag Python
+setting.
 
-| Command | When | Why | Safe to repeat? |
+| Command | Kab | Kyun | Dobara safe? |
 | --- | --- | --- | --- |
-| `python manage.py migrate` | Every deploy | Apply schema changes | Yes |
-| `python manage.py collectstatic --noinput` | Every deploy / CKEditor update | Serve admin, editor and site assets | Yes |
-| `python manage.py seed_posts` | Fresh install, content refresh | Launch Pro Tips | Yes, updates by slug |
-| `python manage.py seed_colleges` | Fresh install | Starter campus list | Yes |
-| `python manage.py seed_colleges --flush` | Only on a throwaway DB | Remove non-starter campuses | **No**; fails while referenced |
-| `python manage.py seed_demo` | Development only | Fake students for clicking through | **No** on production |
-| `python manage.py seed_match` | Development only | Creates and approves a demo match | **No** on production |
-| `python manage.py check_email --to you@x.com` | After mail changes, weekly | Prove SMTP works end to end | Yes |
-| `python manage.py check` | After config changes | Catch configuration errors | Yes |
-| `python manage.py test` | Before deploy, monthly | Regression safety net | Yes |
-| `python manage.py createsuperuser` | Once per environment | Owner access | Only when needed |
-| `python manage.py shell -c "from campus.services import reconcile_all_matches; print(reconcile_all_matches())"` | After imports / suspected misses | Re-queue proposals, never approves | Yes |
-| `python manage.py shell -c "from campus.services import prune_broken_matches; print(prune_broken_matches())"` | Rarely, after backup | Delete provably broken match rows | Careful |
+| `python manage.py migrate` | Har deploy par | Database structure update | Haan |
+| `python manage.py collectstatic --noinput` | Har deploy / editor update | Design aur editor files copy | Haan |
+| `python manage.py seed_posts` | Fresh install / content refresh | Shuruaati Pro Tips | Haan |
+| `python manage.py seed_colleges` | Fresh install | Starter colleges | Haan |
+| `python manage.py seed_colleges --flush` | Sirf test database | Non-starter colleges hatao | **Nahi** |
+| `python manage.py seed_demo` | Sirf development | Fake students | **Live par nahi** |
+| `python manage.py seed_match` | Sirf development | Demo match + asli alerts | **Live par nahi** |
+| `python manage.py check_email --to noreply@whoismycrush.com` | Mail change / weekly | Email system test | Haan |
+| `python manage.py check` | Setting change | Configuration galti pakadna | Haan |
+| `python manage.py test` | Deploy se pehle / monthly | Automatic safety test | Haan |
+| `python manage.py createsuperuser` | Sirf naye server par | Admin account | Zaroorat par |
+| `python manage.py shell -c "from campus.services import reconcile_all_matches; print(reconcile_all_matches())"` | Import / miss hone par | Naye proposals queue karna | Haan |
+| `python manage.py shell -c "from campus.services import prune_broken_matches; print(prune_broken_matches())"` | Rarely, backup ke baad | Tooti matches delete | Careful |
 
-Always take a database backup before shell snippets or bulk admin edits.
+Shell command ya bade ek-saath edit se pehle database ka backup zaroor lein.
 
 ---
 
 ## 11. Incident playbook
 
-### A wrong match was approved
+### Ghalat match approve ho gaya
 
-The email/notification cannot be un-sent, so act quickly and consistently:
+Email ya alert wapas nahi liya ja sakta. Isliye turant yeh karein:
 
-1. Open the `MutualMatch` and set it to `closed` (or use **Close selected
-   matches**). This stops the reveal flow and removes it from open matches.
-2. If the approval was clearly erroneous, correct or add a note on the related
-   `PotentialMatch` rows so the audit trail explains what happened. Do not wipe
-   the original note.
-3. Record who approved it, when, and why it was wrong. Do not delete history.
-4. Contact the affected students using the official support address with a short, factual
-   apology. Never repeat private list details in the message.
-5. If the cause was a duplicate profile, fix the duplicate before the same pair
-   can be proposed again.
+1. Approved matches page
+   (<https://whoismycrush.com/802134admin/campus/mutualmatch/>) par us match ka
+   status **Closed** karein, ya **Close selected matches** action use karein.
+   Isse reveal flow ruk jata hai.
+2. Related proposal rows par note ya correction karein, taaki audit mein reason
+   rahe. Purana note delete na karein.
+3. Incident record mein likhein: kisne approve kiya, kab, aur kyun galat tha.
+   History delete na karein.
+4. Affected students ko official support email se chhota, factual apology
+   bhejein. Message mein private list detail dobara na likhein.
+5. Agar duplicate profile wajah thi, to duplicate pehle theek karein, taaki wahi
+   pair dobara propose na ho.
 
-### A duplicate student or campus appears
+### Duplicate student ya college dikhe
 
-- Student: identify the real profile, deactivate the duplicate user, keep the
-  verified one. Do not force the duplicate's entries onto the real profile.
-- Campus: set the duplicate `is_active = False`; do not delete while it has
-  history. Add a note for the team.
+- Student: asli profile pehchan kar duplicate user deactivate karein, sahi
+  profile rakhein. Duplicate ki entries zabardasti asli profile par shift na
+  karein.
+- College: duplicate ki **Is active** untick karein. History ho to delete na
+  karein. Incident record mein note likhein.
 
-### Spam or abuse wave
+### Spam ya abuse
 
-1. Check the reports queue and the offending accounts.
-2. Deactivate the accounts.
-3. Verify rate limiting is on (`RATELIMIT_ENABLE=True`) and, in multi-worker
-   production, that Redis/Memcached is actually reachable.
-4. If a specific campus is targeted, deactivate the offending accounts first.
-   Setting the campus `is_active = False` only blocks new joins and hides its
-   landing page; existing students keep working, so it is not a substitute for
-   account-level action.
+1. Reports aur offending accounts check karein.
+2. Accounts deactivate karein.
+3. Rate limit on hai ya nahi check karein (`RATELIMIT_ENABLE=True`). Rate limit
+   ka matlab: ek user bahut zyada requests na bhej sake.
+4. Ek college target ho to offending accounts pehle band karein. College inactive
+   karne se sirf naye joins rukte hain; purane students kaam karte rehte hain.
 
 ### Email outage
 
-1. Run `python manage.py check_email --to you@example.com`.
-2. Confirm `EMAIL_BACKEND` is SMTP in production (the default console backend
-   writes mail to the terminal only).
-3. Check app-password/credential expiry.
-4. Inspect the `config.mail` logger output.
-5. Remember: in-app match notifications still exist, so students are not
-   completely blind during the outage.
+1. `python manage.py check_email --to noreply@whoismycrush.com` chalayein.
+2. Live site par email bhejne ka system (SMTP) on hai ya nahi check karein.
+   Default setting sirf terminal mein mail likhti hai; woh live site ke liye
+   kaafi nahi hai.
+3. Email ka app password expire hua ho to naya banayein.
+4. Email log dekhein.
+5. Yaad rakhein: website ke andar ke match alerts email ke bina bhi save hote
+   hain, isliye students poori tarah blind nahi hain.
 
-### Queue is empty but a mutual match is expected
+### Queue khali hai par match expect tha
 
-- Confirm both students actually sealed reciprocal entries.
-- Check that neither side blocked the other.
-- Check that the roll numbers normalize to the same value and that course/year/
-  section do not contradict.
-- Run the reconcile command; it only queues proposals.
-- Inspect the `PotentialMatch` rows for the pair: a previously rejected row
-  will not be recreated.
+- Dono students ne ek doosre ke liye entry ki hai ya nahi, confirm karein.
+- Kisi ne block to nahi kiya, check karein.
+- Roll number same format mein hai ya nahi, aur course/year/section contradiction
+  to nahi, check karein.
+- Matcher command (`reconcile_all_matches`) chalayein. Yeh sirf proposals
+  banata hai.
+- Us pair ke proposal rows dekhein. Pehle reject hua pair dobara apne aap nahi
+  banta.
 
-### Data loss or security incident
+### Data loss ya security incident
 
-1. Stop writes / take the service down if confidentiality is at risk.
-2. Restore the most recent verified backup into staging first.
-3. Rotate `SECRET_KEY`, database credentials and email credentials as
-   appropriate. Rotating `SECRET_KEY` logs everyone out.
-4. Review staff accounts and recent `verified_by` activity.
-5. Preserve logs; do not destroy evidence.
+1. Risk ho to website band karein ya nayi entries rok dein.
+2. Sabse recent verified backup pehle test server par wapas laayein.
+3. Website ki secret key, database password aur email password badal kar naye
+   banayein. Secret key badalne se sab users log out ho jayenge.
+4. Apna admin account aur recent approval activity check karein.
+5. Logs sambhal kar rakhein; evidence delete na karein.
 
 ---
 
 ## 12. Do and do not
 
-**Do**
+**Karein:**
 
-- Use your own named admin account.
-- Open and compare every pair before approving.
-- Write a short review note for every decision.
-- Prefer `/staff/matches/` over bulk admin actions.
-- Keep notifications vague and free of private data.
-- Use `is_active` instead of deletion for users, campuses and staff.
-- Take a backup before any shell command or large edit.
-- Report aggregate numbers, never individual student activity.
+- Apna naam wala single admin account use karein.
+- Har pair kholein aur compare karein, phir approve karein.
+- Identity pehle clear karein, match baad mein approve karein.
+- Notifications vague rakhein; koi private detail na daalein.
+- Users, colleges aur content delete ke bajaye inactive karein.
+- Shell command ya bade edit se pehle backup lein.
+- Total numbers report karein, kisi ek student ki activity spy na karein.
 
-**Do not**
+**Na karein:**
 
-- Reveal, screenshot, export or discuss anyone's crush entries or priority.
-- Approve by name alone. Campus + roll is the identity gate.
-- Approve a one-sided entry, a self-match, a cross-campus pair, or a blocked
-  pair.
-- Bulk-approve rows you have not individually reviewed.
-- Set `MutualMatch.status = revealed` manually.
-- Edit `PotentialMatch.status` manually instead of using approve/reject.
-- Add match data to emails, notifications, blog posts or support replies.
-- Delete staff users, because it erases the approval audit trail.
-- Promise roses, payments or features that are not live.
-- Run `seed_demo`, `seed_match` or `seed_colleges --flush` on production.
+- Kisi ki crush entry, priority ya candidate detail reveal, screenshot ya export
+  na karein.
+- Sirf naam dekhkar approve na karein. Verified identity dekhein.
+- Unresolved identity, one-sided entry, self-match, cross-college pair ya blocked
+  pair approve na karein.
+- Bina ek-ek row check kiye ek saath approve na karein.
+- Approved match ka status haath se Revealed na karein.
+- Match proposal ka status haath se approve/reject na karein; actions use karein.
+- Email, notification, blog ya support reply mein match data na daalein.
+- Admin account delete na karein; audit trail toot jayegi.
+- Rose, payment ya aisi feature promise na karein jo live nahi hai.
+- Live site par `seed_demo`, `seed_match` ya `seed_colleges --flush` na chalayein.
 
 ---
 
 ## 13. Cadence summary
 
-| Cadence | Tasks |
+| Kab | Kaam |
 | --- | --- |
-| Every day | Pending match queue, open reports, contact inbox, email verification requests |
-| Every week | New student identities, campus hygiene, college invites, Pro Tips review, backup + mail check, `manage.py check` |
-| Every month | Reconcile, prune if needed, staff access review, test suite, sitemap/robots check, growth numbers |
-| Every quarter | Restore-drill, secret rotation, dependency update, content audit |
+| Har din | Identity candidates, pending match proposals, open reports, contact messages, email verification requests |
+| Har hafte | New student profiles, deferred candidates, college data check, invite requests, Pro Tips, backup + email check, `manage.py check` |
+| Har mahine | Matcher dobara chalana, tooti matches saaf karna (backup ke baad), automatic tests, duplicate-notification check, sitemap/robots check, growth numbers, admin password check |
+| Har quarter | Backup wapas laane ka test, passwords/security keys badalna, supporting software update, content check |
 
 ---
 
 ## 14. Quick URL reference
 
-| URL | Purpose |
+Neeche sab real URLs hain. `https://whoismycrush.com` ke baad admin ka rasta
+`/802134admin/` hai.
+
+| Kaam | Real URL |
 | --- | --- |
-| `/admin/` | Django admin |
-| `/admin/campus/potentialmatch/` | Raw match proposal queue |
-| `/staff/matches/` | Verification desk (preferred) |
-| `/staff/matches/<id>/` | Side-by-side review + notes |
-| `/admin/campus/report/` | Reports / moderation |
-| `/admin/campus/studentprofile/` | Campus identities |
-| `/admin/campus/college/` | Campuses |
-| `/admin/campus/mutualmatch/` | Approved matches |
-| `/admin/campus/collegeinvite/` | Campus invite demand |
-| `/admin/accounts/emailverification/` | Account email status |
-| `/admin/blog/post/` | Pro Tips posts |
-| `/admin/blog/category/` | Pro Tips categories |
-| `/admin/auth/user/` | Users, staff, permissions |
-| `/pro-tips/` | Public Pro Tips |
-| `/sitemap.xml`, `/robots.txt` | SEO health check |
+| Admin home | <https://whoismycrush.com/802134admin/> |
+| Admin login | <https://whoismycrush.com/802134admin/login/> |
+| Identity candidates | <https://whoismycrush.com/802134admin/campus/identitycandidate/> |
+| Identity audit log | <https://whoismycrush.com/802134admin/campus/identityresolutionaudit/> |
+| Crush entries | <https://whoismycrush.com/802134admin/campus/crushentry/> |
+| Match proposals | <https://whoismycrush.com/802134admin/campus/potentialmatch/> |
+| Approved matches | <https://whoismycrush.com/802134admin/campus/mutualmatch/> |
+| Reports | <https://whoismycrush.com/802134admin/campus/report/> |
+| Blocks | <https://whoismycrush.com/802134admin/campus/block/> |
+| Student profiles | <https://whoismycrush.com/802134admin/campus/studentprofile/> |
+| Colleges | <https://whoismycrush.com/802134admin/campus/college/> |
+| College invites | <https://whoismycrush.com/802134admin/campus/collegeinvite/> |
+| Notifications | <https://whoismycrush.com/802134admin/campus/notification/> |
+| Email verification | <https://whoismycrush.com/802134admin/accounts/emailverification/> |
+| Contact messages | <https://whoismycrush.com/802134admin/contact/contactmessage/> |
+| Pro Tips posts | <https://whoismycrush.com/802134admin/blog/post/> |
+| Pro Tips categories | <https://whoismycrush.com/802134admin/blog/category/> |
+| Users | <https://whoismycrush.com/802134admin/auth/user/> |
+| Public Pro Tips | <https://whoismycrush.com/pro-tips/> |
+| Sitemap | <https://whoismycrush.com/sitemap.xml> |
+| Robots | <https://whoismycrush.com/robots.txt> |

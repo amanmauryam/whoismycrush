@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from .models import (
     Block,
@@ -132,12 +132,31 @@ def compare(entry: CrushEntry, student: StudentProfile) -> MatchVerdict:
     # -- identity gate -----------------------------------------------------
     if entry.college_id != student.college_id:
         return MatchVerdict(False, 0.0, blockers=["different campus"])
-    if entry.normalized_roll_number != student.normalized_roll_number:
-        return MatchVerdict(False, 0.0, blockers=["different roll number"])
-    reasons.append("campus + roll number match")
-
     if entry.submitted_by_id == student.pk:
         return MatchVerdict(False, 0.0, blockers=["same student"])
+
+    if entry.resolved_student_id:
+        # Identity resolution has already done the hard work. Keep the link
+        # authoritative, but still refuse a hard course/year/section
+        # contradiction: that is evidence two different people were blended.
+        if entry.resolved_student_id != student.pk:
+            if (
+                entry.normalized_roll_number
+                and entry.normalized_roll_number != student.normalized_roll_number
+            ):
+                return MatchVerdict(False, 0.0, blockers=["different roll number"])
+            return MatchVerdict(
+                False, 0.0, blockers=["resolved to a different student"]
+            )
+        reasons.append("identity confirmed by resolution")
+    else:
+        # Legacy/unresolved path: the original exact college + roll gate is
+        # retained so direct comparisons stay conservative.
+        if not entry.normalized_roll_number or (
+            entry.normalized_roll_number != student.normalized_roll_number
+        ):
+            return MatchVerdict(False, 0.0, blockers=["different roll number"])
+        reasons.append("campus + roll number match")
 
     score = 0.0
 
@@ -206,17 +225,32 @@ def compare(entry: CrushEntry, student: StudentProfile) -> MatchVerdict:
 # ---------------------------------------------------------------------------
 
 
+def _reason_text(verdict: MatchVerdict) -> str:
+    return ", ".join(verdict.reasons or verdict.blockers)[:300]
+
+
+def _refresh_resolved_proposal(match: PotentialMatch) -> None:
+    verdict = compare(match.crush_entry, match.registered_student)
+    match.confidence_score = verdict.confidence
+    match.match_reasons = _reason_text(verdict)
+    match.save(update_fields=["confidence_score", "match_reasons"])
+
+
 def _sync_pending_proposal(
     entry: CrushEntry, student: StudentProfile, verdict: MatchVerdict
 ) -> PotentialMatch | None:
-    """Create or refresh one pending proposal, or drop it if it no longer fits.
+    """Create or refresh one proposal, or drop it if it no longer fits.
 
-    Pending scores are intentionally recomputed on every add/edit so an admin
-    always sees the current confidence. Reviewed rows are never touched: an
-    approval or rejection is a human decision, not something a later edit may
-    silently undo.
+    Pending rows that stop qualifying are deleted. Reviewed rows keep their
+    status -- an approval or rejection is never silently undone -- but their
+    advisory score still reflects the latest edited details.
     """
-    qualified = verdict.eligible and verdict.confidence >= MIN_CONFIDENCE
+    # A reviewer-confirmed identity is sufficient even when the typed details
+    # are sparse; the score is advisory. Unresolved entries still need the
+    # normal confidence floor before a proposal is worth an admin's time.
+    qualified = verdict.eligible and (
+        bool(entry.resolved_student_id) or verdict.confidence >= MIN_CONFIDENCE
+    )
     match = PotentialMatch.objects.filter(
         crush_entry=entry, registered_student=student
     ).first()
@@ -224,47 +258,76 @@ def _sync_pending_proposal(
     if match is None:
         if not qualified:
             return None
-        return PotentialMatch.objects.create(
-            crush_entry=entry,
-            registered_student=student,
-            confidence_score=verdict.confidence,
-            match_reasons=", ".join(verdict.reasons)[:300],
-            status=PotentialMatch.Status.PENDING,
-        )
+        try:
+            with transaction.atomic():
+                return PotentialMatch.objects.create(
+                    crush_entry=entry,
+                    registered_student=student,
+                    confidence_score=verdict.confidence,
+                    match_reasons=_reason_text(verdict),
+                    status=PotentialMatch.Status.PENDING,
+                )
+        except IntegrityError:
+            # A concurrent matcher created the same unique proposal.
+            match = PotentialMatch.objects.get(
+                crush_entry=entry, registered_student=student
+            )
 
-    if match.status != PotentialMatch.Status.PENDING:
-        return None
-
-    if not qualified:
+    if match.status == PotentialMatch.Status.PENDING and not qualified:
         match.delete()
         return None
 
     match.confidence_score = verdict.confidence
-    match.match_reasons = ", ".join(verdict.reasons)[:300]
+    match.match_reasons = _reason_text(verdict)
     match.save(update_fields=["confidence_score", "match_reasons"])
     return None
 
 
-@transaction.atomic
-def propose_for_entry(entry: CrushEntry) -> list[PotentialMatch]:
-    """Find registered students matching ``entry`` and queue them for review.
+def _proposal_candidates(entry: CrushEntry) -> list[StudentProfile]:
+    """The only students a proposal may point at for this entry.
 
-    Existing pending rows are refreshed in place, and rows that no longer fit
-    (because the entry was edited or blocked) are removed. Returns only rows
-    newly created.
+    A resolved entry points at exactly its verified identity. The unresolved
+    fallback preserves the old exact-roll proposal path for legacy rows; it
+    still cannot become a confirmed match until approval re-checks resolution.
     """
-    if not entry.is_active or not entry.normalized_roll_number:
-        return []
 
     author = entry.submitted_by
-    candidates = list(
-        StudentProfile.objects.filter(
-            college_id=entry.college_id,
-            normalized_roll_number=entry.normalized_roll_number,
-        )
-        .exclude(pk=author.pk)
-        .exclude(pk__in=_blocked_ids(author))
-    )
+    base = StudentProfile.objects.filter(
+        college_id=entry.college_id, user__is_active=True
+    ).exclude(pk=author.pk).exclude(pk__in=_blocked_ids(author))
+
+    if entry.resolved_student_id:
+        return list(base.filter(pk=entry.resolved_student_id))
+
+    if not entry.normalized_roll_number:
+        return []
+    return list(base.filter(normalized_roll_number=entry.normalized_roll_number))
+
+
+@transaction.atomic
+def propose_for_entry(
+    entry: CrushEntry, *, resolve: bool = True
+) -> list[PotentialMatch]:
+    """Find registered students matching ``entry`` and queue them for review.
+
+    Resolves identity first (unless the caller just did so), refreshes existing
+    pending rows in place, and removes rows that no longer fit because the entry
+    was edited or blocked. Returns only rows newly created.
+    """
+
+    if not entry.is_active:
+        return []
+
+    if resolve:
+        from .identity_resolution import resolve_entry
+
+        resolve_entry(entry)
+        entry.refresh_from_db()
+
+    if not entry.resolved_student_id and not entry.normalized_roll_number:
+        return []
+
+    candidates = _proposal_candidates(entry)
     candidate_ids = [student.pk for student in candidates]
 
     created: list[PotentialMatch] = []
@@ -277,36 +340,23 @@ def propose_for_entry(entry: CrushEntry) -> list[PotentialMatch]:
     PotentialMatch.objects.filter(
         crush_entry=entry, status=PotentialMatch.Status.PENDING
     ).exclude(registered_student_id__in=candidate_ids).delete()
-    return created
-
-
-@transaction.atomic
-def refresh_incoming_matches(student: StudentProfile) -> list[PotentialMatch]:
-    """Re-score every entry that points at ``student`` after a profile edit.
-
-    Also removes pending rows for entries that no longer describe this student
-    (for example after a roll number change).
-    """
-    incoming = list(
-        CrushEntry.objects.active()
-        .filter(
-            college_id=student.college_id,
-            normalized_roll_number=student.normalized_roll_number,
-        )
-        .exclude(submitted_by=student)
+    stale_reviewed = PotentialMatch.objects.filter(crush_entry=entry).exclude(
+        registered_student_id__in=candidate_ids
     )
-    entry_ids = [entry.pk for entry in incoming]
-
-    created: list[PotentialMatch] = []
-    for entry in incoming:
-        new_match = _sync_pending_proposal(entry, student, compare(entry, student))
-        if new_match is not None:
-            created.append(new_match)
-
-    PotentialMatch.objects.filter(
-        registered_student=student, status=PotentialMatch.Status.PENDING
-    ).exclude(crush_entry_id__in=entry_ids).delete()
+    for match in stale_reviewed:
+        _refresh_resolved_proposal(match)
     return created
+
+
+def refresh_incoming_matches(student: StudentProfile) -> list[PotentialMatch]:
+    """Resolve/re-score every entry affected by a registration or profile edit.
+
+    Delegates to the identity service so name-only and missing-roll entries get
+    the same safe treatment as the submit-time path.
+    """
+    from .identity_resolution import refresh_for_student
+
+    return refresh_for_student(student)
 
 
 def match_entries_for(author: StudentProfile) -> list[PotentialMatch]:

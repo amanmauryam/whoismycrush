@@ -44,6 +44,23 @@ urlpatterns = [
         views.reject_match,
         name="reject_match",
     ),
+    # staff: separate ambiguous identity review desk
+    path("staff/identities/", views.identity_review, name="identity_review"),
+    path(
+        "staff/identities/<int:pk>/",
+        views.identity_review_detail,
+        name="identity_review_detail",
+    ),
+    path(
+        "staff/identities/<int:pk>/<str:action>/",
+        views.identity_entry_action,
+        name="identity_entry_action",
+    ),
+    path(
+        "staff/identities/candidate/<int:pk>/<str:action>/",
+        views.identity_candidate_action,
+        name="identity_candidate_action",
+    ),
     # notifications
     path("notifications/", views.notification_list, name="notifications"),
     path("notifications/read/", views.mark_read, name="mark_all_read"),

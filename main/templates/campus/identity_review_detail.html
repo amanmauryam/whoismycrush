@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:identity_review' %}">Identity review</a>
+    <span>→</span>
+    <span>Entry #{{ entry.pk }}</span>
+  </div>
+
+  <div class="page-head">
+    <h1>Identity review #{{ entry.pk }}</h1>
+    <p>Resolve the typed entry to one registered student before match review.</p>
+  </div>
+
+  <div class="paper" style="margin-top:20px">
+    <h2 class="tiny-label">Typed entry</h2>
+    <dl class="detail-list">
+      <dt>Name</dt><dd>{{ entry.full_name }}</dd>
+      <dt>Roll</dt><dd>{{ entry.roll_number|default:"not given" }}</dd>
+      <dt>Campus</dt><dd>{{ entry.college.name }}</dd>
+      <dt>Course / year</dt><dd>{{ entry.get_course_display }} · Year {{ entry.year }}</dd>
+      <dt>Section</dt><dd>{{ entry.section|default:"not given" }}</dd>
+      <dt>Department</dt><dd>{{ entry.department|default:"not given" }}</dd>
+      <dt>Submitted by</dt><dd>{{ entry.submitted_by.full_name }}</dd>
+      <dt>Status</dt><dd>{{ entry.get_identity_status_display }}</dd>
+      <dt>Verified identity</dt>
+      <dd>
+        {% if entry.resolved_student %}
+          {{ entry.resolved_student.full_name }}
+          <span class="muted">({{ entry.resolution_method }})</span>
+        {% else %}
+          <span class="muted">Not linked</span>
+        {% endif %}
+      </dd>
+    </dl>
+
+    <div class="review-actions" style="margin-top:16px">
+      <form method="post" action="{% url 'campus:identity_entry_action' entry.pk 'unresolvable' %}">
+        {% csrf_token %}
+        <button class="btn btn-sm" type="submit">Mark unresolvable</button>
+      </form>
+      <form method="post" action="{% url 'campus:identity_entry_action' entry.pk 'reopen' %}">
+        {% csrf_token %}
+        <button class="btn btn-sm" type="submit">Re-run resolution</button>
+      </form>
+    </div>
+  </div>
+
+  <section class="section">
+    <h2 class="tiny-label">Candidates</h2>
+    {% if candidates %}
+      <div class="paper">
+        <table class="review-table">
+          <thead>
+            <tr>
+              <th scope="col">Student</th>
+              <th scope="col">Roll</th>
+              <th scope="col">Course / year</th>
+              <th scope="col">Name match</th>
+              <th scope="col">Confidence</th>
+              <th scope="col">Status</th>
+              <th scope="col">Decision</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for candidate in candidates %}
+              <tr>
+                <td>
+                  {{ candidate.candidate.full_name }}
+                  <div class="muted small">{{ candidate.candidate.college.name }}</div>
+                </td>
+                <td>{{ candidate.candidate.roll_number }}</td>
+                <td>
+                  {{ candidate.candidate.get_course_display }} · Year {{ candidate.candidate.year }}
+                  {% if candidate.candidate.section %}· {{ candidate.candidate.section }}{% endif %}
+                </td>
+                <td>
+                  {% if candidate.name_similarity %}
+                    {{ candidate.name_similarity|floatformat:2 }}
+                  {% else %}—{% endif %}
+                </td>
+                <td>
+                  {% if candidate.confidence_score %}
+                    {{ candidate.confidence_score|floatformat:0 }}%
+                  {% else %}—{% endif %}
+                </td>
+                <td>{{ candidate.get_status_display }}</td>
+                <td>
+                  <form method="post" action="{% url 'campus:identity_candidate_action' candidate.pk 'confirm' %}" style="display:inline">
+                    {% csrf_token %}
+                    <button class="btn btn-sm" type="submit">Confirm</button>
+                  </form>
+                  <form method="post" action="{% url 'campus:identity_candidate_action' candidate.pk 'reject' %}" style="display:inline">
+                    {% csrf_token %}
+                    <button class="btn btn-sm" type="submit">Reject</button>
+                  </form>
+                  <form method="post" action="{% url 'campus:identity_candidate_action' candidate.pk 'defer' %}" style="display:inline">
+                    {% csrf_token %}
+                    <button class="btn btn-sm" type="submit">Defer</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted">
+        No plausible candidate yet. The entry is kept safely and is rechecked when
+        a matching student registers or edits their campus identity.
+      </p>
+    {% endif %}
+  </section>
+
+  <section class="section">
+    <h2 class="tiny-label">Audit trail</h2>
+    {% if audit %}
+      <ul class="review-list">
+        {% for event in audit %}
+          <li>
+            <span class="stamp">{{ event.get_action_display }}</span>
+            {{ event.from_status|default:"—" }} → {{ event.to_status|default:"—" }}
+            <span class="muted">
+              {% if event.candidate %}· {{ event.candidate.full_name }}{% endif %}
+              · {{ event.actor|default:"system" }}
+              · {{ event.created_at }}
+            </span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No identity decisions recorded yet.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -21,11 +21,19 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from .forms import CrushEntryForm, StudentIdentityForm
+from .identity_resolution import (
+    confirm_candidate,
+    mark_unresolvable,
+    reject_candidate,
+    resolve_entry,
+)
 from .matching import MIN_CONFIDENCE, compare, pending_pairs
 from .models import (
     MAX_CRUSHES,
     College,
     CrushEntry,
+    IdentityCandidate,
+    IdentityResolutionAudit,
     MutualMatch,
     Notification,
     PotentialMatch,
@@ -273,6 +281,210 @@ class MatchingGateTests(TestCase):
         self.assertGreaterEqual(verdict.confidence, MIN_CONFIDENCE)
 
 
+class IdentityResolutionTests(TestCase):
+    def setUp(self):
+        self.college = College.objects.create(name="ABC College")
+        self.me = make_student(self.college, "23BCA101", "Aman Kumar")
+        self.target = make_student(self.college, "23BCA102", "Priya Sharma")
+        self.admin = make_admin()
+
+    def test_exact_roll_and_name_auto_resolves_with_audit(self):
+        entry = make_entry(self.me, self.target)
+        resolve_entry(entry)
+        entry.refresh_from_db()
+
+        self.assertEqual(entry.resolved_student, self.target)
+        self.assertEqual(entry.identity_status, CrushEntry.ResolutionStatus.RESOLVED)
+        self.assertTrue(entry.resolution_method.startswith("auto"))
+        candidate = IdentityCandidate.objects.get(
+            crush_entry=entry, candidate=self.target
+        )
+        self.assertEqual(candidate.status, IdentityCandidate.Status.CONFIRMED)
+        self.assertTrue(
+            IdentityResolutionAudit.objects.filter(
+                crush_entry=entry,
+                action=IdentityResolutionAudit.Action.AUTO_RESOLVED,
+            ).exists()
+        )
+
+    def test_missing_roll_creates_candidate_but_never_auto_binds(self):
+        entry = make_entry(self.me, self.target, roll_number="")
+        resolve_entry(entry)
+        entry.refresh_from_db()
+
+        self.assertIsNone(entry.resolved_student)
+        self.assertEqual(
+            entry.identity_status, CrushEntry.ResolutionStatus.CANDIDATE_FOUND
+        )
+        self.assertTrue(
+            IdentityCandidate.objects.filter(
+                crush_entry=entry, candidate=self.target
+            ).exists()
+        )
+        self.assertFalse(
+            PotentialMatch.objects.filter(crush_entry=entry).exists()
+        )
+
+    def test_conflicting_roll_creates_review_candidate_but_never_binds(self):
+        entry = make_entry(self.me, self.target, roll_number="WRONG-999")
+        resolve_entry(entry)
+        entry.refresh_from_db()
+        candidate = IdentityCandidate.objects.get(
+            crush_entry=entry, candidate=self.target
+        )
+
+        self.assertIsNone(entry.resolved_student)
+        self.assertEqual(
+            entry.identity_status, CrushEntry.ResolutionStatus.NEEDS_REVIEW
+        )
+        self.assertTrue(candidate.evidence["roll_conflict"])
+
+    def test_late_registration_recovers_a_previous_entry_safely(self):
+        typed_early = CrushEntry.objects.create(
+            submitted_by=self.me,
+            priority=1,
+            full_name="Riya Verma",
+            roll_number="23BCA777",
+            college=self.college,
+            course="BCA",
+            year=2,
+            section="A",
+            department="",
+        )
+        resolve_entry(typed_early)
+        typed_early.refresh_from_db()
+        self.assertIsNone(typed_early.resolved_student)
+
+        joined = make_student(self.college, "23BCA777", "Riya Verma")
+        make_entry(joined, self.me)
+        from .matching import match_new_student
+
+        match_new_student(joined)
+        typed_early.refresh_from_db()
+
+        self.assertEqual(typed_early.resolved_student, joined)
+        self.assertTrue(
+            PotentialMatch.objects.filter(
+                crush_entry=typed_early,
+                registered_student=joined,
+                status=PotentialMatch.Status.PENDING,
+            ).exists()
+        )
+
+    def test_reviewer_confirmation_links_identity_and_queues_proposal(self):
+        entry = make_entry(self.me, self.target, roll_number="")
+        resolve_entry(entry)
+        candidate = IdentityCandidate.objects.get(
+            crush_entry=entry, candidate=self.target
+        )
+
+        confirm_candidate(candidate, self.admin, notes="Documents checked.")
+        entry.refresh_from_db()
+        candidate.refresh_from_db()
+
+        self.assertEqual(entry.resolved_student, self.target)
+        self.assertEqual(candidate.status, IdentityCandidate.Status.CONFIRMED)
+        self.assertTrue(
+            PotentialMatch.objects.filter(
+                crush_entry=entry,
+                registered_student=self.target,
+                status=PotentialMatch.Status.PENDING,
+            ).exists()
+        )
+
+    def test_rejecting_candidate_keeps_entry_unresolved(self):
+        entry = make_entry(self.me, self.target, roll_number="")
+        resolve_entry(entry)
+        candidate = IdentityCandidate.objects.get(
+            crush_entry=entry, candidate=self.target
+        )
+
+        reject_candidate(candidate, self.admin, notes="Not the same person.")
+        entry.refresh_from_db()
+        candidate.refresh_from_db()
+
+        self.assertIsNone(entry.resolved_student)
+        self.assertEqual(candidate.status, IdentityCandidate.Status.REJECTED)
+
+        resolve_entry(entry, force=True)
+        entry.refresh_from_db()
+        candidate.refresh_from_db()
+        self.assertIsNone(entry.resolved_student)
+        self.assertEqual(candidate.status, IdentityCandidate.Status.REJECTED)
+
+    def test_mark_unresolvable_preserves_entry_and_clears_pending_match(self):
+        entry = make_entry(self.me, self.target)
+        resolve_entry(entry)
+        seal_secret(self.me)
+        self.assertTrue(PotentialMatch.objects.filter(crush_entry=entry).exists())
+
+        mark_unresolvable(entry, self.admin, notes="Person unidentifiable.")
+        entry.refresh_from_db()
+
+        self.assertTrue(entry.is_active)
+        self.assertEqual(entry.identity_status, CrushEntry.ResolutionStatus.UNRESOLVABLE)
+        self.assertIsNone(entry.resolved_student)
+        self.assertFalse(
+            PotentialMatch.objects.filter(
+                crush_entry=entry, status=PotentialMatch.Status.PENDING
+            ).exists()
+        )
+
+    def test_approval_refuses_entry_that_is_not_verified(self):
+        make_entry(self.me, self.target)
+        make_entry(self.target, self.me)
+        seal_secret(self.me)
+        seal_secret(self.target)
+        proposal = pending_pairs()[0]["forward"]
+        CrushEntry.objects.filter(pk=proposal.crush_entry_id).update(
+            resolved_student=None,
+            identity_status=CrushEntry.ResolutionStatus.NEEDS_REVIEW,
+        )
+
+        with self.assertRaises(ApprovalError):
+            approve_potential_match(proposal, self.admin)
+        self.assertEqual(MutualMatch.objects.count(), 0)
+        self.assertEqual(Notification.objects.count(), 0)
+
+
+class IdentityReviewAccessTests(TestCase):
+    def setUp(self):
+        self.college = College.objects.create(name="ABC College")
+        self.me = make_student(self.college, "23BCA101", "Aman")
+        self.target = make_student(self.college, "23BCA102", "Priya")
+        make_entry(self.me, self.target, roll_number="")
+        resolve_entry(CrushEntry.objects.get(submitted_by=self.me))
+
+    def test_superuser_can_open_identity_review(self):
+        admin = make_admin()
+        self.client.force_login(admin)
+        response = self.client.get(reverse("campus:identity_review"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Identity review")
+
+    def test_plain_staff_without_identity_permission_is_redirected(self):
+        staff = User.objects.create_user(
+            username="staff@x.edu", email="staff@x.edu", password="x", is_staff=True
+        )
+        self.client.force_login(staff)
+        response = self.client.get(reverse("campus:identity_review"))
+        self.assertEqual(response.status_code, 302)
+
+    def test_superuser_can_confirm_from_review_desk(self):
+        admin = make_admin()
+        candidate = IdentityCandidate.objects.get(candidate=self.target)
+        self.client.force_login(admin)
+        response = self.client.post(
+            reverse(
+                "campus:identity_candidate_action",
+                args=[candidate.pk, "confirm"],
+            )
+        )
+        self.assertEqual(response.status_code, 302)
+        candidate.refresh_from_db()
+        self.assertEqual(candidate.status, IdentityCandidate.Status.CONFIRMED)
+
+
 class ProposalTests(TestCase):
     def setUp(self):
         self.college = College.objects.create(name="ABC College")
@@ -348,6 +560,7 @@ class ProposalTests(TestCase):
         entry = make_entry(self.a, self.b)
         seal_secret(self.a)
         proposal = PotentialMatch.objects.get(crush_entry=entry)
+        proposal_pk = proposal.pk
         before = proposal.confidence_score
 
         self.client.force_login(self.a.user)
@@ -356,7 +569,23 @@ class ProposalTests(TestCase):
             entry_payload("crush1", self.b, **{"crush1-full_name": "Priyaa"}),
         )
         proposal.refresh_from_db()
+        self.assertEqual(proposal.pk, proposal_pk)
         self.assertLess(proposal.confidence_score, before)
+
+    def test_entry_below_threshold_gains_a_proposal_when_edited_above_it(self):
+        entry = make_entry(
+            self.a, self.b, full_name="Someone Else", section=""
+        )
+        seal_secret(self.a)
+        self.assertEqual(PotentialMatch.objects.pending().count(), 0)
+
+        self.client.force_login(self.a.user)
+        self.client.post(
+            reverse("campus:edit_crush", args=[entry.pk]),
+            entry_payload("crush1", self.b, **{"crush1-section": ""}),
+        )
+        proposal = PotentialMatch.objects.get(crush_entry=entry)
+        self.assertGreaterEqual(proposal.confidence_score, MIN_CONFIDENCE)
 
     def test_editing_entry_to_another_student_replaces_the_proposal(self):
         entry = make_entry(self.a, self.b)
@@ -426,9 +655,43 @@ class ApprovalTests(TestCase):
         )
 
     def test_approval_is_idempotent_for_a_pair(self):
-        approve_potential_match(self.proposal, self.admin)
+        match = approve_potential_match(self.proposal, self.admin)
+        self.assertIsNotNone(match.notified_at)
+        notifications = Notification.objects.count()
         with self.assertRaises(ApprovalError):
             approve_potential_match(self.proposal, self.admin)
+        self.assertEqual(MutualMatch.objects.count(), 1)
+        self.assertEqual(Notification.objects.count(), notifications)
+
+    def test_editing_refreshes_score_without_undoing_approval(self):
+        approve_potential_match(self.proposal, self.admin)
+        entry = self.proposal.crush_entry
+        before = self.proposal.confidence_score
+
+        self.client.force_login(self.a.user)
+        self.client.post(
+            reverse("campus:edit_crush", args=[entry.pk]),
+            entry_payload("crush1", self.b, **{"crush1-full_name": "Priyaa"}),
+        )
+        self.proposal.refresh_from_db()
+        self.assertEqual(self.proposal.status, PotentialMatch.Status.APPROVED)
+        self.assertLess(self.proposal.confidence_score, before)
+        self.assertEqual(MutualMatch.objects.count(), 1)
+
+    def test_repointing_an_approved_entry_drops_its_stale_score(self):
+        approve_potential_match(self.proposal, self.admin)
+        entry = self.proposal.crush_entry
+        other = make_student(self.college, "23BCA103", "Rohan")
+
+        self.client.force_login(self.a.user)
+        self.client.post(
+            reverse("campus:edit_crush", args=[entry.pk]),
+            entry_payload("crush1", other),
+        )
+        self.proposal.refresh_from_db()
+        self.assertEqual(self.proposal.status, PotentialMatch.Status.APPROVED)
+        self.assertEqual(self.proposal.confidence_score, 0)
+        self.assertIn("different roll number", self.proposal.match_reasons)
         self.assertEqual(MutualMatch.objects.count(), 1)
 
     def test_only_the_side_that_consented_reports_consent(self):
@@ -729,6 +992,11 @@ class EveryPageSmokeTests(TestCase):
         self.assertAllPagesLoad([
             reverse("campus:pending_matches"),
             reverse("campus:pending_match_detail", args=[self.proposal.pk]),
+            reverse("campus:identity_review"),
+            reverse(
+                "campus:identity_review_detail",
+                args=[self.proposal.crush_entry_id],
+            ),
         ])
 
     def test_onboarding_pages_redirect_once_you_are_complete(self):
