@@ -3,128 +3,370 @@
 {% block content %}
 <div class="container">
   <div class="breadcrumb">
-    <a href="{% url 'campus:dashboard' %}">Dashboard</a> <span>→</span> <span>Pending crush matches</span>
+    <a href="{% url 'campus:staff_dashboard' %}">Staff desk</a>
+    <span>→</span>
+    <span>Match review</span>
   </div>
 
   <div class="page-head">
-    <h1>Pending crush matches</h1>
+    <p class="tiny-label">Private match desk</p>
+    <h1>Match review</h1>
     <p>
-      Only reciprocal pairs appear here. Nothing is announced to either student
-      until you approve it, and a one-sided entry can never be a match.
+      A proposal becomes a mutual match only when both people entered each
+      other and staff approve it. Confidence is advisory evidence, never a
+      decision.
     </p>
-    {% if perms.campus.review_identitycandidate or user.is_superuser %}
-      <p>
-        <a class="btn btn-sm" href="{% url 'campus:identity_review' %}">
-          Review ambiguous identities
-        </a>
-      </p>
-    {% endif %}
   </div>
+
+  {% include "campus/staff_nav.html" %}
 
   <div class="notice-box">
     {% include "components/icon.html" with name="shield" size=15 %}
-    Confidence is advisory. Check both identities against the roll number and
-    campus before approving.
+    Check both directions, the block status and the reason fields. Approving
+    notifies both students; rejecting notifies nobody.
   </div>
 
-  {% if pairs %}
-    <div class="paper" style="margin-top:20px">
-      <table class="review-table">
-        <thead>
-          <tr>
-            <th scope="col">Person A typed</th>
-            <th scope="col">Person B typed</th>
-            <th scope="col">Campus</th>
-            <th scope="col">Confidence</th>
-            <th scope="col"><span class="sr-only">Review</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for pair in pairs %}
-            <tr>
-              <td>
-                <strong>{{ pair.forward.author.full_name }}</strong>
-                <span class="muted"> entered </span>
-                <strong>{{ pair.forward.crush_entry.full_name }}</strong>
-              </td>
-              <td>
-                <strong>{{ pair.backward.author.full_name }}</strong>
-                <span class="muted"> entered </span>
-                <strong>{{ pair.backward.crush_entry.full_name }}</strong>
-              </td>
-              <td>{{ pair.forward.crush_entry.college.name }}</td>
-              <td>
-                {% if pair.confidence %}
-                  {{ pair.confidence|floatformat:0 }}%
-                {% else %}
-                  —
-                {% endif %}
-              </td>
-              <td>
-                <a class="btn btn-sm" href="{% url 'campus:pending_match_detail' pair.forward.pk %}">
-                  Review
-                </a>
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+  <div class="staff-metrics staff-metrics-compact">
+    <div class="staff-metric">
+      <span class="staff-metric-figure">{{ total_pair_count }}</span>
+      <span class="staff-metric-label">Reciprocal pairs</span>
+      <span class="staff-metric-note">Before filters</span>
     </div>
-  {% else %}
-    <div class="empty-state">
-      <span class="doodle" aria-hidden="true">✓</span>
-      <h2>All clear</h2>
-      <p class="muted">No pending reciprocal pairs to verify right now.</p>
+    <div class="staff-metric">
+      <span class="staff-metric-figure">{{ pair_count }}</span>
+      <span class="staff-metric-label">In this view</span>
+      <span class="staff-metric-note">After search and filters</span>
     </div>
-  {% endif %}
+    <a class="staff-metric is-warning" href="{% querystring blocked='1' page=None %}">
+      <span class="staff-metric-figure">{{ blocked_pair_count }}</span>
+      <span class="staff-metric-label">Blocked conflicts</span>
+      <span class="staff-metric-note">Cannot be approved</span>
+    </a>
+    <a class="staff-metric" href="#stale-proposals">
+      <span class="staff-metric-figure">{{ stale_count }}</span>
+      <span class="staff-metric-label">Stale proposals</span>
+      <span class="staff-metric-note">History only</span>
+    </a>
+  </div>
+
+  <form class="review-toolbar" method="get" role="search">
+    <div class="review-toolbar-search">
+      <label class="sr-only" for="match-search">Search matches</label>
+      <span class="review-toolbar-icon" aria-hidden="true">
+        {% include "components/icon.html" with name="search" size=18 %}
+      </span>
+      <input class="input" id="match-search" type="search" name="q"
+             value="{{ query }}" placeholder="Student, crush, roll or campus">
+    </div>
+    <div class="review-toolbar-field">
+      <label for="match-college">Campus</label>
+      <select id="match-college" name="college">
+        <option value="">All campuses</option>
+        {% for college in colleges %}
+          <option value="{{ college.pk }}"{% if selected_college == college.pk|stringformat:"s" %} selected{% endif %}>
+            {{ college.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="review-toolbar-field">
+      <label for="match-sort">Sort</label>
+      <select id="match-sort" name="sort">
+        <option value="confidence"{% if sort == 'confidence' %} selected{% endif %}>Highest confidence</option>
+        <option value="oldest"{% if sort == 'oldest' %} selected{% endif %}>Oldest first</option>
+        <option value="newest"{% if sort == 'newest' %} selected{% endif %}>Newest first</option>
+        <option value="name"{% if sort == 'name' %} selected{% endif %}>Person A name</option>
+        <option value="campus"{% if sort == 'campus' %} selected{% endif %}>Campus</option>
+      </select>
+    </div>
+    <label class="review-toolbar-check">
+      <input type="checkbox" name="blocked" value="1"{% if blocked_only %} checked{% endif %}>
+      Blocked only
+    </label>
+    <div class="review-toolbar-actions">
+      <button class="btn btn-sm btn-primary" type="submit">Apply</button>
+      {% if query or selected_college or blocked_only or sort != 'confidence' %}
+        <a class="btn btn-sm" href="{% url 'campus:pending_matches' %}">Clear</a>
+      {% endif %}
+    </div>
+  </form>
+
+  <section class="section" aria-labelledby="pair-queue-heading">
+    <div class="section-head">
+      <div>
+        <span class="section-label">Reciprocal queue</span>
+        <h2 id="pair-queue-heading">Pairs waiting for approval</h2>
+      </div>
+    </div>
+
+    {% if pairs %}
+      <div class="paper table-panel">
+        <div class="table-scroll">
+          <table class="review-table match-table">
+            <thead>
+              <tr>
+                <th scope="col">Pair</th>
+                <th scope="col">Campus</th>
+                <th scope="col">Confidence</th>
+                <th scope="col"><span class="sr-only">Review</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for pair in pairs %}
+                <tr>
+                  <td data-label="Pair">
+                    <div class="pair-people">
+                      <div>
+                        <span class="pair-person">{{ pair.forward.author.full_name }}</span>
+                        <span class="pair-arrow" aria-label="entered">→</span>
+                        <span class="pair-person">{{ pair.forward.crush_entry.full_name }}</span>
+                      </div>
+                      <div>
+                        <span class="pair-person">{{ pair.backward.author.full_name }}</span>
+                        <span class="pair-arrow" aria-label="entered">→</span>
+                        <span class="pair-person">{{ pair.backward.crush_entry.full_name }}</span>
+                      </div>
+                    </div>
+                    {% if pair.is_blocked %}
+                      <span class="stamp">BLOCKED · REVIEW REJECTION</span>
+                    {% endif %}
+                  </td>
+                  <td data-label="Campus">{{ pair.forward.crush_entry.college.name }}</td>
+                  <td data-label="Confidence">
+                    <span class="score-pill">
+                      {% if pair.confidence %}{{ pair.confidence|floatformat:0 }}%{% else %}—{% endif %}
+                    </span>
+                  </td>
+                  <td data-label="Review" class="row-action">
+                    <a class="btn btn-sm" href="{% url 'campus:pending_match_detail' pair.forward.pk %}">
+                      Review pair
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {% if page_obj.has_other_pages %}
+        <nav class="pagination" aria-label="Match review pages">
+          {% if page_obj.has_previous %}
+            <a class="btn btn-sm" href="{% querystring page=page_obj.previous_page_number %}">Previous</a>
+          {% endif %}
+          <span class="muted small">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+            ({{ pair_count }} pair{{ pair_count|pluralize }})
+          </span>
+          {% if page_obj.has_next %}
+            <a class="btn btn-sm" href="{% querystring page=page_obj.next_page_number %}">Next</a>
+          {% endif %}
+        </nav>
+      {% endif %}
+    {% else %}
+      <div class="empty-state">
+        <span class="doodle" aria-hidden="true">✓</span>
+        <h2>
+          {% if query or selected_college or blocked_only %}
+            No pairs match these filters
+          {% else %}
+            No reciprocal pairs waiting
+          {% endif %}
+        </h2>
+        <p class="muted">
+          {% if query or selected_college or blocked_only %}
+            Try a different campus or search term.
+          {% else %}
+            Both sides must enter each other before a pair appears here.
+          {% endif %}
+        </p>
+        {% if query or selected_college or blocked_only %}
+          <a class="btn btn-sm" href="{% url 'campus:pending_matches' %}">Clear filters</a>
+        {% endif %}
+      </div>
+    {% endif %}
+  </section>
 
   {% if unpaired %}
-    <section class="section" style="margin-top:32px">
-      <h2 class="tiny-label">One-sided entries ({{ unpaired|length }})</h2>
-      <p class="muted small">
-        These are not matches yet — the other person has not entered them back.
-        Listed only for completeness; you cannot approve them.
-      </p>
-      <ul class="review-list">
-        {% for match in unpaired %}
-          <li>
-            <strong>{{ match.author.full_name }}</strong> entered
-            <strong>{{ match.crush_entry.full_name }}</strong>
-            <span class="muted">({{ match.crush_entry.get_course_display }} · {{ match.crush_entry.year }})</span>
-            <span class="muted">— no reciprocal entry</span>
-          </li>
-        {% endfor %}
-      </ul>
+    <section class="section" aria-labelledby="unpaired-heading">
+      <div class="section-head">
+        <div>
+          <span class="section-label">One-sided</span>
+          <h2 id="unpaired-heading">Pending proposals without a reciprocal</h2>
+          <p class="muted small">
+            Shown for completeness. They cannot be approved until the other
+            person also enters a matching crush.
+          </p>
+        </div>
+        <span class="score-pill">
+          {{ unpaired_page_obj.start_index }}–{{ unpaired_page_obj.end_index }}
+          of {{ unpaired_count }}
+        </span>
+      </div>
+
+      <div class="paper table-panel">
+        <div class="table-scroll">
+          <table class="review-table">
+            <thead>
+              <tr>
+                <th scope="col">Direction</th>
+                <th scope="col">Campus</th>
+                <th scope="col">Confidence</th>
+                <th scope="col"><span class="sr-only">Inspect</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for proposal in unpaired %}
+                <tr>
+                  <td data-label="Direction">
+                    <strong>{{ proposal.author.full_name }}</strong>
+                    <span class="muted">entered</span>
+                    <strong>{{ proposal.crush_entry.full_name }}</strong>
+                    {% if proposal.is_blocked %}
+                      <span class="stamp">BLOCKED</span>
+                    {% endif %}
+                  </td>
+                  <td data-label="Campus">{{ proposal.crush_entry.college.name }}</td>
+                  <td data-label="Confidence">
+                    <span class="score-pill">
+                      {% if proposal.confidence_score %}
+                        {{ proposal.confidence_score|floatformat:0 }}%
+                      {% else %}
+                        —
+                      {% endif %}
+                    </span>
+                  </td>
+                  <td data-label="Inspect" class="row-action">
+                    <a class="btn btn-sm" href="{% url 'campus:pending_match_detail' proposal.pk %}">
+                      Inspect
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {% if unpaired_page_obj.has_other_pages %}
+        <nav class="pagination" aria-label="One-sided proposal pages">
+          {% if unpaired_page_obj.has_previous %}
+            <a class="btn btn-sm" href="{% querystring upage=unpaired_page_obj.previous_page_number %}">Previous</a>
+          {% endif %}
+          <span class="muted small">
+            Page {{ unpaired_page_obj.number }} of {{ unpaired_page_obj.paginator.num_pages }}
+            ({{ unpaired_count }} proposal{{ unpaired_count|pluralize }})
+          </span>
+          {% if unpaired_page_obj.has_next %}
+            <a class="btn btn-sm" href="{% querystring upage=unpaired_page_obj.next_page_number %}">Next</a>
+          {% endif %}
+        </nav>
+      {% endif %}
     </section>
   {% endif %}
 
-  {% if recently_approved %}
-    <section class="section">
-      <h2 class="tiny-label">Recently approved</h2>
-      <ul class="review-list">
-        {% for match in recently_approved %}
-          <li>
-            <span class="stamp stamp-green">APPROVED</span>
-            {{ match.author.full_name }} → {{ match.registered_student.full_name }}
-            <span class="muted">by {{ match.verified_by|default:"—" }}</span>
-          </li>
-        {% endfor %}
-      </ul>
+  {% if stale_proposals %}
+    <section class="section" id="stale-proposals" aria-labelledby="stale-heading">
+      <div class="section-head">
+        <div>
+          <span class="section-label">History</span>
+          <h2 id="stale-heading">Stale proposals</h2>
+          <p class="muted small">
+            A previously valid proposal became ineligible. It stays visible for
+            audit but cannot be approved.
+          </p>
+        </div>
+        <span class="score-pill">{{ stale_count }} total</span>
+      </div>
+
+      <div class="paper table-panel">
+        <div class="table-scroll">
+          <table class="review-table">
+            <thead>
+              <tr>
+                <th scope="col">Proposal</th>
+                <th scope="col">Why it is stale</th>
+                <th scope="col"><span class="sr-only">Inspect</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for proposal in stale_proposals %}
+                <tr>
+                  <td data-label="Proposal">
+                    <strong>{{ proposal.author.full_name }}</strong>
+                    <span class="muted">entered</span>
+                    <strong>{{ proposal.crush_entry.full_name }}</strong>
+                  </td>
+                  <td data-label="Why it is stale">
+                    {{ proposal.invalidated_reason|default:"No reason recorded." }}
+                  </td>
+                  <td data-label="Inspect" class="row-action">
+                    <a class="btn btn-sm" href="{% url 'campus:pending_match_detail' proposal.pk %}">
+                      Inspect
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
   {% endif %}
 
-  {% if recently_rejected %}
-    <section class="section">
-      <h2 class="tiny-label">Recently rejected</h2>
-      <ul class="review-list">
-        {% for match in recently_rejected %}
-          <li>
-            <span class="stamp">REJECTED</span>
-            {{ match.author.full_name }} → {{ match.registered_student.full_name }}
-            <span class="muted">by {{ match.verified_by|default:"—" }}</span>
-          </li>
-        {% endfor %}
-      </ul>
+  {% if recently_approved or recently_rejected %}
+    <section class="section" aria-labelledby="recent-heading">
+      <div class="section-head">
+        <div>
+          <span class="section-label">Recent decisions</span>
+          <h2 id="recent-heading">Previously reviewed</h2>
+        </div>
+      </div>
+
+      <div class="recent-grid">
+        {% if recently_approved %}
+          <div class="paper recent-panel">
+            <h3><span class="stamp stamp-green">APPROVED</span></h3>
+            <ul class="queue-list">
+              {% for proposal in recently_approved %}
+                <li class="queue-item">
+                  <div class="queue-main">
+                    <strong>{{ proposal.author.full_name }}</strong>
+                    <span class="muted">and</span>
+                    <strong>{{ proposal.registered_student.full_name }}</strong>
+                    <span class="queue-meta">
+                      {{ proposal.verified_at|date:"d M Y, H:i"|default:"—" }}
+                      · {{ proposal.verified_by|default:"system" }}
+                    </span>
+                  </div>
+                  <a class="btn btn-sm" href="{% url 'campus:pending_match_detail' proposal.pk %}">Open</a>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+        {% if recently_rejected %}
+          <div class="paper recent-panel">
+            <h3><span class="stamp">REJECTED</span></h3>
+            <ul class="queue-list">
+              {% for proposal in recently_rejected %}
+                <li class="queue-item">
+                  <div class="queue-main">
+                    <strong>{{ proposal.author.full_name }}</strong>
+                    <span class="muted">and</span>
+                    <strong>{{ proposal.registered_student.full_name }}</strong>
+                    <span class="queue-meta">
+                      {{ proposal.verified_at|date:"d M Y, H:i"|default:"—" }}
+                      · {{ proposal.verified_by|default:"system" }}
+                    </span>
+                  </div>
+                  <a class="btn btn-sm" href="{% url 'campus:pending_match_detail' proposal.pk %}">Open</a>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+      </div>
     </section>
   {% endif %}
 </div>

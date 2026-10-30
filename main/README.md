@@ -71,13 +71,20 @@ guide. Notable switches:
 | `CACHE_BACKEND` | `locmem` | `redis` / `memcached` for shared counters in production |
 | `ANALYTICS_ENABLED` + `ANALYTICS_DOMAIN` | off | Cookie-less Plausible analytics |
 | `MATCH_EMAILS_ENABLED` | `True` | Whether the "it's mutual" alert is emailed |
+| `VERIFICATION_EMAIL_TIMEOUT` | `45` | Per-send SMTP timeout; must exceed slow provider greetings |
+| `VERIFICATION_EMAIL_MAX_ATTEMPTS` | `5` | Delivery attempts before a verification row stays failed |
 
 Check the mail setup any time with:
 
 ```
 python manage.py check_email                  # connect and authenticate only
 python manage.py check_email --to you@x.com  # also send a real test message
+python manage.py process_verification_emails # recover pending/failed outbox rows
 ```
+
+Verification mail is queued durably before the registration response returns.
+Schedule `process_verification_emails` every minute in production; the
+in-process dispatcher thread is only a latency optimisation.
 
 Delivery failures are logged under the `config.mail` logger and reported to the
 caller, so a broken mail server shows up in the terminal instead of silently

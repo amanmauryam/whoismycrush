@@ -10,9 +10,11 @@ Invariants under test:
 
 import datetime as dt
 from io import StringIO
+from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -25,11 +27,14 @@ from .identity_resolution import (
     confirm_candidate,
     mark_unresolvable,
     reject_candidate,
+    reopen_candidate,
     resolve_entry,
+    score_candidate,
 )
 from .matching import MIN_CONFIDENCE, compare, pending_pairs
 from .models import (
     MAX_CRUSHES,
+    Block,
     College,
     CrushEntry,
     IdentityCandidate,
@@ -160,6 +165,21 @@ class CrushEntryFormTests(TestCase):
             prefix="crush1",
         )
         self.assertTrue(form.is_valid(), form.errors)
+
+    def test_a_crush_cannot_be_entered_on_another_campus(self):
+        other = College.objects.create(name="XYZ University")
+        form = CrushEntryForm(
+            entry_payload(
+                "crush1",
+                self.target,
+                **{"crush1-college": other.pk},
+            ),
+            author=self.me,
+            priority=1,
+            prefix="crush1",
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("college", form.errors)
 
 
 class CampusIdEditTests(TestCase):
@@ -307,6 +327,19 @@ class IdentityResolutionTests(TestCase):
             ).exists()
         )
 
+    def test_candidate_evidence_records_weighted_score_components(self):
+        entry = make_entry(self.me, self.target)
+        scored = score_candidate(entry, self.target)
+        components = scored.evidence["components"]
+
+        self.assertEqual(
+            set(components),
+            {"roll", "name", "nickname", "course", "year", "section", "department"},
+        )
+        self.assertAlmostEqual(sum(components.values()), scored.score, places=1)
+        self.assertEqual(components["roll"], 45.0)
+        self.assertEqual(components["name"], 30.0)
+
     def test_missing_roll_creates_candidate_but_never_auto_binds(self):
         entry = make_entry(self.me, self.target, roll_number="")
         resolve_entry(entry)
@@ -412,6 +445,27 @@ class IdentityResolutionTests(TestCase):
         self.assertIsNone(entry.resolved_student)
         self.assertEqual(candidate.status, IdentityCandidate.Status.REJECTED)
 
+    def test_reopening_a_rejected_candidate_is_audited(self):
+        entry = make_entry(self.me, self.target, roll_number="")
+        resolve_entry(entry)
+        candidate = IdentityCandidate.objects.get(
+            crush_entry=entry, candidate=self.target
+        )
+        reject_candidate(candidate, self.admin, notes="Not enough evidence.")
+        candidate.refresh_from_db()
+
+        reopen_candidate(candidate, self.admin, notes="Student provided an ID.")
+        candidate.refresh_from_db()
+
+        self.assertEqual(candidate.status, IdentityCandidate.Status.NEEDS_REVIEW)
+        self.assertTrue(
+            IdentityResolutionAudit.objects.filter(
+                crush_entry=entry,
+                action=IdentityResolutionAudit.Action.REOPENED,
+                candidate_to_status=IdentityCandidate.Status.NEEDS_REVIEW,
+            ).exists()
+        )
+
     def test_mark_unresolvable_preserves_entry_and_clears_pending_match(self):
         entry = make_entry(self.me, self.target)
         resolve_entry(entry)
@@ -478,7 +532,8 @@ class IdentityReviewAccessTests(TestCase):
             reverse(
                 "campus:identity_candidate_action",
                 args=[candidate.pk, "confirm"],
-            )
+            ),
+            {"notes": "Verified against the campus ID card."},
         )
         self.assertEqual(response.status_code, 302)
         candidate.refresh_from_db()
@@ -601,16 +656,14 @@ class ProposalTests(TestCase):
             reverse("campus:edit_crush", args=[entry.pk]),
             entry_payload("crush1", self.c),
         )
-        self.assertFalse(
-            PotentialMatch.objects.filter(
-                crush_entry=entry, registered_student=self.b
-            ).exists()
+        old = PotentialMatch.objects.get(
+            crush_entry=entry, registered_student=self.b
         )
-        self.assertTrue(
-            PotentialMatch.objects.filter(
-                crush_entry=entry, registered_student=self.c
-            ).exists()
+        self.assertEqual(old.status, PotentialMatch.Status.STALE)
+        new = PotentialMatch.objects.get(
+            crush_entry=entry, registered_student=self.c
         )
+        self.assertEqual(new.status, PotentialMatch.Status.PENDING)
 
     def test_priority_range_is_enforced(self):
         entry = CrushEntry(
@@ -721,6 +774,21 @@ class ApprovalTests(TestCase):
         solo = PotentialMatch.objects.pending().get(registered_student=outsider)
         with self.assertRaises(ApprovalError):
             approve_potential_match(solo, self.admin)
+
+    def test_review_desk_requires_a_note_before_approving(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("campus:approve_match", args=[self.proposal.pk]),
+            {},
+        )
+        self.assertRedirects(
+            response,
+            reverse("campus:pending_match_detail", args=[self.proposal.pk]),
+        )
+        self.proposal.refresh_from_db()
+        self.assertEqual(self.proposal.status, PotentialMatch.Status.PENDING)
+        self.assertEqual(MutualMatch.objects.count(), 0)
+        self.assertEqual(Notification.objects.count(), 0)
 
 
 class PriorityPrivacyTests(TestCase):
@@ -891,6 +959,30 @@ class FlowTests(TestCase):
         )
         self.assertEqual(CrushEntry.objects.filter(submitted_by=me).count(), 0)
 
+    def test_mark_read_ignores_an_external_next_url(self):
+        me = make_student(self.college, "23BCA202", "Aman Kumar")
+        note = Notification.objects.create(
+            student=me,
+            kind=Notification.Kind.REVEAL,
+            message="Test notification",
+            url="/matches/",
+        )
+        self.client.force_login(me.user)
+        response = self.client.post(
+            reverse("campus:mark_read", args=[note.pk]),
+            {"next": "https://evil.example/phish"},
+        )
+        self.assertRedirects(response, reverse("campus:notifications"))
+
+    def test_block_ignores_an_external_next_url(self):
+        me = make_student(self.college, "23BCA203", "Aman Kumar")
+        self.client.force_login(me.user)
+        response = self.client.post(
+            reverse("campus:block", args=[self.target.pk]),
+            {"confirm": "on", "next": "https://evil.example/phish"},
+        )
+        self.assertRedirects(response, reverse("campus:matches"))
+
 
 class CollegeCreateTests(TestCase):
     """A candidate can add a missing college; later candidates find it."""
@@ -990,6 +1082,7 @@ class EveryPageSmokeTests(TestCase):
     def test_every_staff_page_as_verifier(self):
         self.client.force_login(self.admin)
         self.assertAllPagesLoad([
+            reverse("campus:staff_dashboard"),
             reverse("campus:pending_matches"),
             reverse("campus:pending_match_detail", args=[self.proposal.pk]),
             reverse("campus:identity_review"),
@@ -1172,3 +1265,417 @@ class CollegeGrowthTests(TestCase):
     def test_landing_does_not_index_college_slugs(self):
         xml = self.client.get("/sitemap.xml").content.decode()
         self.assertNotIn(f"/college/{self.college.slug}", xml)
+
+
+class StaffDashboardTests(TestCase):
+    def setUp(self):
+        self.college = College.objects.create(name="ABC College")
+        self.a = make_student(self.college, "23BCA101", "Aman")
+        self.b = make_student(self.college, "23BCA102", "Priya")
+        self.c = make_student(self.college, "23BCA103", "Rohan")
+        self.d = make_student(self.college, "23BCA104", "Neha")
+        self.e = make_student(self.college, "23BCA105", "Kabir")
+        self.f = make_student(self.college, "23BCA106", "Isha")
+        self.admin = make_admin()
+
+        make_entry(self.a, self.b)
+        make_entry(self.b, self.a)
+        seal_secret(self.a)
+        seal_secret(self.b)
+        Block.objects.create(blocker=self.a, blocked=self.b)
+
+        stale_entry = make_entry(self.c, self.d)
+        PotentialMatch.objects.create(
+            crush_entry=stale_entry,
+            registered_student=self.d,
+            status=PotentialMatch.Status.STALE,
+            invalidated_reason="Entry was edited.",
+        )
+
+        self.identity_entry = make_entry(self.e, self.f, roll_number="")
+        self.identity_entry.identity_status = (
+            CrushEntry.ResolutionStatus.NEEDS_REVIEW
+        )
+        self.identity_entry.save(update_fields=["identity_status"])
+        IdentityCandidate.objects.create(
+            crush_entry=self.identity_entry,
+            candidate=self.f,
+            status=IdentityCandidate.Status.NEEDS_REVIEW,
+            confidence_score=70,
+            name_similarity=0.91,
+            evidence={"reasons": ["name similar"], "conflicts": []},
+        )
+        CrushEntry.objects.exclude(pk=self.identity_entry.pk).update(
+            identity_status=CrushEntry.ResolutionStatus.RESOLVED
+        )
+
+    def test_dashboard_counts_both_queues(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("campus:staff_dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["pending_pair_count"], 1)
+        self.assertEqual(response.context["blocked_pair_count"], 1)
+        self.assertEqual(response.context["stale_count"], 1)
+        self.assertEqual(response.context["identity_review_count"], 1)
+        self.assertEqual(response.context["unresolved_identity_count"], 1)
+        self.assertContains(response, "Reciprocal queue")
+        self.assertContains(response, "Ambiguous entries")
+
+    def test_identity_only_staff_see_only_the_identity_desk(self):
+        staff = User.objects.create_user(
+            username="identity@x.edu",
+            email="identity@x.edu",
+            password="x",
+            is_staff=True,
+        )
+        staff.user_permissions.add(
+            Permission.objects.get(codename="review_identitycandidate")
+        )
+        self.client.force_login(staff)
+        response = self.client.get(reverse("campus:staff_dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["can_review_identities"])
+        self.assertFalse(response.context["can_verify_matches"])
+        self.assertContains(response, "Ambiguous entries")
+        self.assertNotContains(response, "Reciprocal queue")
+
+    def test_plain_staff_without_review_permissions_is_redirected(self):
+        staff = User.objects.create_user(
+            username="plain@x.edu",
+            email="plain@x.edu",
+            password="x",
+            is_staff=True,
+        )
+        self.client.force_login(staff)
+        response = self.client.get(reverse("campus:staff_dashboard"))
+        self.assertEqual(response.status_code, 302)
+
+
+class StaffMatchQueueTests(TestCase):
+    def setUp(self):
+        self.college = College.objects.create(name="ABC College")
+        self.other = College.objects.create(name="XYZ University")
+        self.a = make_student(self.college, "23BCA101", "Aman")
+        self.b = make_student(self.college, "23BCA102", "Priya")
+        self.c = make_student(self.other, "23XYZ201", "Rohan")
+        self.d = make_student(self.other, "23XYZ202", "Neha")
+        make_entry(self.a, self.b)
+        make_entry(self.b, self.a)
+        make_entry(self.c, self.d)
+        make_entry(self.d, self.c)
+        for student in [self.a, self.b, self.c, self.d]:
+            seal_secret(student)
+        Block.objects.create(blocker=self.a, blocked=self.b)
+        self.admin = make_admin()
+
+    def test_search_filters_by_either_direction(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(
+            reverse("campus:pending_matches"), {"q": "Aman"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["total_pair_count"], 2)
+        self.assertEqual(response.context["pair_count"], 1)
+        self.assertEqual(len(response.context["pairs"]), 1)
+
+    def test_blocked_filter_and_campus_filter(self):
+        self.client.force_login(self.admin)
+        blocked = self.client.get(
+            reverse("campus:pending_matches"), {"blocked": "1"}
+        )
+        self.assertEqual(blocked.context["pair_count"], 1)
+        self.assertTrue(blocked.context["pairs"][0]["is_blocked"])
+
+        campus = self.client.get(
+            reverse("campus:pending_matches"), {"college": self.other.pk}
+        )
+        self.assertEqual(campus.context["pair_count"], 1)
+        self.assertEqual(
+            campus.context["pairs"][0]["forward"].crush_entry.college_id,
+            self.other.pk,
+        )
+
+    def test_one_sided_proposals_are_paginated(self):
+        for index in range(21):
+            student = make_student(
+                self.other, f"23XYZ{300 + index}", f"Reviewer {index}"
+            )
+            make_entry(student, self.c)
+            seal_secret(student)
+        self.client.force_login(self.admin)
+
+        response = self.client.get(reverse("campus:pending_matches"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["unpaired_count"], 21)
+        self.assertEqual(len(response.context["unpaired"]), 20)
+        self.assertEqual(
+            response.context["unpaired_page_obj"].paginator.num_pages, 2
+        )
+
+        second = self.client.get(reverse("campus:pending_matches"), {"upage": 2})
+        self.assertEqual(len(second.context["unpaired"]), 1)
+
+    def test_sort_and_pagination_parameters_are_safe(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(
+            reverse("campus:pending_matches"),
+            {"sort": "oldest", "page": "999"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["sort"], "oldest")
+        self.assertEqual(response.context["page_obj"].number, 1)
+
+
+class StaffIdentityQueueTests(TestCase):
+    def setUp(self):
+        self.college = College.objects.create(name="ABC College")
+        self.me = make_student(self.college, "23BCA101", "Aman")
+        self.target = make_student(self.college, "23BCA102", "Priya")
+        self.other = make_student(self.college, "23BCA103", "Rohan")
+        self.entry = make_entry(self.me, self.target, roll_number="")
+        self.entry.identity_status = CrushEntry.ResolutionStatus.NEEDS_REVIEW
+        self.entry.save(update_fields=["identity_status"])
+        self.candidate = IdentityCandidate.objects.create(
+            crush_entry=self.entry,
+            candidate=self.target,
+            status=IdentityCandidate.Status.NEEDS_REVIEW,
+            confidence_score=72,
+            name_similarity=0.9,
+            evidence={"reasons": ["name matches"], "conflicts": []},
+        )
+        self.conflict = IdentityCandidate.objects.create(
+            crush_entry=self.entry,
+            candidate=self.other,
+            status=IdentityCandidate.Status.CANDIDATE,
+            confidence_score=55,
+            name_similarity=0.71,
+            evidence={
+                "reasons": ["name similar"],
+                "conflicts": ["roll number differs"],
+                "roll_conflict": True,
+            },
+        )
+        Block.objects.create(blocker=self.me, blocked=self.other)
+        self.admin = make_admin()
+
+    def test_identity_filters_and_counts(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(
+            reverse("campus:identity_review"), {"status": "needs_review"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["entry_count"], 1)
+        self.assertEqual(response.context["status_counts"]["needs_review"], 1)
+        self.assertContains(response, "Priya")
+
+        search = self.client.get(
+            reverse("campus:identity_review"), {"q": "Aman"}
+        )
+        self.assertEqual(search.context["entry_count"], 1)
+
+        empty = self.client.get(
+            reverse("campus:identity_review"), {"q": "Nobody Here"}
+        )
+        self.assertEqual(empty.context["entry_count"], 0)
+
+    def test_candidate_selection_shows_conflicts_and_blocks(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(
+            reverse("campus:identity_review_detail", args=[self.entry.pk]),
+            {"candidate": self.conflict.pk},
+        )
+        self.assertEqual(response.status_code, 200)
+        selected = response.context["selected_candidate"]
+        self.assertEqual(selected.pk, self.conflict.pk)
+        self.assertTrue(selected.hard_conflict)
+        self.assertTrue(selected.is_blocked)
+        self.assertFalse(selected.is_eligible)
+        self.assertContains(response, "A block exists")
+        self.assertContains(response, "ROLL CONFLICT")
+        self.assertContains(response, f"?candidate={self.candidate.pk}")
+
+    def test_detail_renders_weighted_score_breakdown(self):
+        self.candidate.evidence = {
+            "reasons": ["name matches"],
+            "conflicts": [],
+            "score": 72,
+            "components": {
+                "roll": 45,
+                "name": 20,
+                "nickname": 0,
+                "course": 4,
+                "year": 3,
+                "section": 0,
+                "department": 0,
+            },
+        }
+        self.candidate.save(update_fields=["evidence"])
+        self.client.force_login(self.admin)
+
+        response = self.client.get(
+            reverse("campus:identity_review_detail", args=[self.entry.pk]),
+            {"candidate": self.candidate.pk},
+        )
+
+        self.assertContains(response, "Score breakdown")
+        self.assertContains(response, "Roll number")
+        self.assertContains(response, "45.0 / 45")
+        self.assertContains(response, "20.0 / 30")
+
+    def test_bulk_rerun_is_post_only_and_audited(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("campus:identity_bulk_action"))
+        self.assertEqual(response.status_code, 405)
+
+        response = self.client.post(
+            reverse("campus:identity_bulk_action"),
+            {"action": "rerun", "entry_ids": [self.entry.pk]},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            IdentityResolutionAudit.objects.filter(
+                crush_entry=self.entry,
+                action=IdentityResolutionAudit.Action.REOPENED,
+            ).exists()
+        )
+
+    def test_bulk_rerun_requires_identity_permission(self):
+        staff = User.objects.create_user(
+            username="plain@x.edu",
+            email="plain@x.edu",
+            password="x",
+            is_staff=True,
+        )
+        self.client.force_login(staff)
+        response = self.client.post(
+            reverse("campus:identity_bulk_action"),
+            {"action": "rerun", "entry_ids": [self.entry.pk]},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.entry.refresh_from_db()
+        self.assertEqual(
+            self.entry.identity_status,
+            CrushEntry.ResolutionStatus.NEEDS_REVIEW,
+        )
+
+
+class StaffWorkflowEndToEndTests(TestCase):
+    def setUp(self):
+        self.college = College.objects.create(name="ABC College")
+        self.a = make_student(self.college, "23BCA101", "Aman")
+        self.b = make_student(self.college, "23BCA102", "Priya")
+        self.entry_a = make_entry(self.a, self.b, roll_number="")
+        self.entry_b = make_entry(self.b, self.a, roll_number="")
+        resolve_entry(self.entry_a)
+        resolve_entry(self.entry_b)
+        seal_secret(self.a)
+        seal_secret(self.b)
+        self.admin = make_admin()
+
+    def test_staff_can_resolve_identities_and_approve_the_match(self):
+        self.client.force_login(self.admin)
+
+        dashboard = self.client.get(reverse("campus:staff_dashboard"))
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertEqual(dashboard.context["unresolved_identity_count"], 2)
+
+        queue = self.client.get(reverse("campus:identity_review"))
+        self.assertEqual(queue.status_code, 200)
+        self.assertEqual(queue.context["entry_count"], 2)
+
+        for entry, target in [(self.entry_a, self.b), (self.entry_b, self.a)]:
+            candidate = IdentityCandidate.objects.get(
+                crush_entry=entry, candidate=target
+            )
+            response = self.client.post(
+                reverse(
+                    "campus:identity_candidate_action",
+                    args=[candidate.pk, "confirm"],
+                ),
+                {"notes": "Checked the campus record."},
+            )
+            self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(
+            PotentialMatch.objects.filter(
+                status=PotentialMatch.Status.PENDING
+            ).count(),
+            2,
+        )
+
+        match_queue = self.client.get(reverse("campus:pending_matches"))
+        self.assertEqual(match_queue.status_code, 200)
+        self.assertEqual(match_queue.context["pair_count"], 1)
+
+        proposal = PotentialMatch.objects.pending().first()
+        detail = self.client.get(
+            reverse("campus:pending_match_detail", args=[proposal.pk])
+        )
+        self.assertEqual(detail.status_code, 200)
+        self.assertContains(detail, "Approve match")
+
+        approved = self.client.post(
+            reverse("campus:approve_match", args=[proposal.pk]),
+            {"admin_notes": "Both entries and identities verified."},
+        )
+        self.assertEqual(approved.status_code, 302)
+        self.assertEqual(MutualMatch.objects.count(), 1)
+        self.assertEqual(Notification.objects.count(), 2)
+
+
+class StaffMatchDecisionTests(TestCase):
+    def setUp(self):
+        self.college = College.objects.create(name="ABC College")
+        self.a = make_student(self.college, "23BCA101", "Aman")
+        self.b = make_student(self.college, "23BCA102", "Priya")
+        make_entry(self.a, self.b)
+        make_entry(self.b, self.a)
+        seal_secret(self.a)
+        seal_secret(self.b)
+        self.proposal = PotentialMatch.objects.pending().first()
+        self.admin = make_admin()
+
+    @patch("campus.views.reconcile_all_matches")
+    def test_reconcile_requires_match_review_permission(self, reconcile):
+        staff = User.objects.create_user(
+            username="identity@x.edu",
+            email="identity@x.edu",
+            password="x",
+            is_staff=True,
+        )
+        staff.user_permissions.add(
+            Permission.objects.get(codename="review_identitycandidate")
+        )
+        self.client.force_login(staff)
+
+        response = self.client.post(reverse("campus:reconcile"))
+
+        self.assertEqual(response.status_code, 302)
+        reconcile.assert_not_called()
+
+    def test_blocked_detail_disables_approval(self):
+        Block.objects.create(blocker=self.b, blocked=self.a)
+        self.client.force_login(self.admin)
+        response = self.client.get(
+            reverse("campus:pending_match_detail", args=[self.proposal.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["blocked"])
+        self.assertFalse(response.context["can_approve"])
+        self.assertContains(response, "A block exists")
+        self.assertContains(response, "Approve match")
+
+    def test_decided_proposal_has_no_decision_actions(self):
+        reject_potential_match(
+            self.proposal, self.admin, admin_notes="Identity evidence conflicted."
+        )
+        self.client.force_login(self.admin)
+        response = self.client.get(
+            reverse("campus:pending_match_detail", args=[self.proposal.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["can_approve"])
+        self.assertContains(response, "Decision history")
+        self.assertNotContains(response, "Approve match")
+        self.assertNotContains(response, "Reject match")

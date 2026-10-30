@@ -15,6 +15,9 @@
         <a class="nav-link{% if nav_secret %} is-active{% endif %}" href="{% url 'campus:secret' %}">My secret</a>
         <a class="nav-link{% if nav_matches %} is-active{% endif %}" href="{% url 'campus:matches' %}">Matches</a>
         <a class="nav-link{% if nav_account %} is-active{% endif %}" href="{% url 'campus:campus_id' %}">Profile</a>
+        {% if user.is_superuser or perms.campus.verify_potentialmatch or perms.campus.review_identitycandidate %}
+          <a class="nav-link{% if nav_staff or active_staff %} is-active{% endif %}" href="{% url 'campus:staff_dashboard' %}">Staff desk</a>
+        {% endif %}
       {% endif %}
     </nav>
 

@@ -366,6 +366,16 @@ class CrushEntry(models.Model):
     )
     resolution_method = models.CharField(max_length=40, blank=True)
     resolution_notes = models.CharField(max_length=300, blank=True)
+    resolution_scoring_version = models.CharField(max_length=40, blank=True)
+    resolution_scored_at = models.DateTimeField(null=True, blank=True)
+    original_payload = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "First submitted values, preserved for audit even after the student "
+            "corrects the entry. Never shown to either student."
+        ),
+    )
 
     objects = CrushEntryQuerySet.as_manager()
 
@@ -379,6 +389,14 @@ class CrushEntry(models.Model):
             models.CheckConstraint(
                 condition=Q(priority__gte=1) & Q(priority__lte=MAX_CRUSHES),
                 name="crush_entry_priority_range",
+            ),
+            # The form checks this sequentially, but two concurrent submissions
+            # can both pass validation. The database must be the final guard so
+            # one person is never stored twice in the same active list.
+            models.UniqueConstraint(
+                fields=["submitted_by", "normalized_roll_number"],
+                condition=Q(is_active=True) & ~Q(normalized_roll_number=""),
+                name="unique_active_entry_target_roll",
             ),
             # A resolved link may only exist on a resolved row. The reverse is
             # enforced by the service, because account deletion sets the link
@@ -405,6 +423,17 @@ class CrushEntry(models.Model):
     def save(self, *args, **kwargs):
         self.normalized_name = normalize_name(self.full_name)
         self.normalized_roll_number = normalize_roll_number(self.roll_number)
+        if self._state.adding and not self.original_payload:
+            self.original_payload = {
+                "full_name": self.full_name,
+                "roll_number": self.roll_number,
+                "college_id": self.college_id,
+                "course": self.course,
+                "year": self.year,
+                "section": self.section,
+                "department": self.department,
+                "nickname": self.nickname,
+            }
         if kwargs.get("update_fields") is not None:
             kwargs["update_fields"] = {
                 *kwargs["update_fields"],
@@ -417,6 +446,35 @@ class CrushEntry(models.Model):
         super().clean()
         if self.priority and not 1 <= self.priority <= MAX_CRUSHES:
             raise ValidationError({"priority": "Choose between 1 and 3."})
+        normalized_roll = normalize_roll_number(self.roll_number)
+        if (
+            self.submitted_by_id
+            and self.is_active
+            and normalized_roll
+            and CrushEntry.objects.filter(
+                submitted_by_id=self.submitted_by_id,
+                is_active=True,
+                normalized_roll_number=normalized_roll,
+            )
+            .exclude(pk=self.pk)
+            .exists()
+        ):
+            raise ValidationError(
+                {
+                    "roll_number": (
+                        "You already entered someone with this campus and roll "
+                        "number."
+                    )
+                }
+            )
+        if (
+            self.submitted_by_id
+            and self.college_id
+            and self.submitted_by.college_id != self.college_id
+        ):
+            raise ValidationError(
+                {"college": "A crush must be on the student's own campus."}
+            )
         if (
             self.submitted_by_id
             and self.resolved_student_id
@@ -525,6 +583,18 @@ class MutualMatch(models.Model):
     def save(self, *args, **kwargs):
         if self.user_a_id and self.user_b_id and self.user_a_id > self.user_b_id:
             self.user_a, self.user_b = self.user_b, self.user_a
+            self.user_a_consented, self.user_b_consented = (
+                self.user_b_consented,
+                self.user_a_consented,
+            )
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = {
+                    *kwargs["update_fields"],
+                    "user_a",
+                    "user_b",
+                    "user_a_consented",
+                    "user_b_consented",
+                }
         super().save(*args, **kwargs)
 
     def sync_status(self, *, save: bool = True) -> None:
@@ -552,6 +622,9 @@ class MutualMatch(models.Model):
 class PotentialMatchQuerySet(models.QuerySet):
     def pending(self):
         return self.filter(status=PotentialMatch.Status.PENDING)
+
+    def stale(self):
+        return self.filter(status=PotentialMatch.Status.STALE)
 
     def approved(self):
         return self.filter(status=PotentialMatch.Status.APPROVED)
@@ -585,6 +658,7 @@ class PotentialMatch(models.Model):
         PENDING = "pending", "Pending Verification"
         APPROVED = "approved", "Approved"
         REJECTED = "rejected", "Rejected"
+        STALE = "stale", "Stale / No longer eligible"
 
     crush_entry = models.ForeignKey(
         CrushEntry, on_delete=models.CASCADE, related_name="potential_matches"
@@ -604,6 +678,9 @@ class PotentialMatch(models.Model):
     )
     #: Why the matcher proposed this, e.g. "roll+course+year+section agree".
     match_reasons = models.CharField(max_length=300, blank=True)
+    invalidated_reason = models.CharField(max_length=300, blank=True)
+    scoring_version = models.CharField(max_length=40, blank=True, default="legacy")
+    scored_at = models.DateTimeField(null=True, blank=True)
     admin_notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     verified_at = models.DateTimeField(null=True, blank=True)
@@ -636,6 +713,7 @@ class PotentialMatch(models.Model):
         indexes = [
             models.Index(fields=["status", "-created_at"]),
             models.Index(fields=["registered_student", "status"]),
+            models.Index(fields=["crush_entry", "status"]),
         ]
         permissions = [
             ("verify_potentialmatch", "Can approve or reject potential matches"),
@@ -656,7 +734,11 @@ class PotentialMatch(models.Model):
 
     @property
     def is_resolved(self) -> bool:
-        return self.status != self.Status.PENDING
+        return self.status in {self.Status.APPROVED, self.Status.REJECTED}
+
+    @property
+    def is_stale(self) -> bool:
+        return self.status == self.Status.STALE
 
     @property
     def confidence_percent(self) -> str:
@@ -730,6 +812,8 @@ class IdentityCandidate(models.Model):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.CANDIDATE, db_index=True
     )
+    scoring_version = models.CharField(max_length=40, blank=True, default="legacy")
+    scored_at = models.DateTimeField(null=True, blank=True)
     reviewed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -819,6 +903,8 @@ class IdentityResolutionAudit(models.Model):
     action = models.CharField(max_length=30, choices=Action.choices)
     from_status = models.CharField(max_length=30, blank=True)
     to_status = models.CharField(max_length=30, blank=True)
+    candidate_from_status = models.CharField(max_length=30, blank=True)
+    candidate_to_status = models.CharField(max_length=30, blank=True)
     notes = models.CharField(max_length=300, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -968,6 +1054,13 @@ class Notification(models.Model):
         ROSE = "rose", "Rose"
         SYSTEM = "system", "System"
 
+    class EmailStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SENDING = "sending", "Sending"
+        SENT = "sent", "Sent"
+        FAILED = "failed", "Failed"
+        SKIPPED = "skipped", "Skipped"
+
     student = models.ForeignKey(
         StudentProfile, on_delete=models.CASCADE, related_name="notifications"
     )
@@ -975,11 +1068,27 @@ class Notification(models.Model):
     message = models.CharField(max_length=200)
     url = models.CharField(max_length=200, blank=True)
     is_read = models.BooleanField(default=False)
+    #: Stable key makes repeated events (approval retries, two reveal clicks)
+    #: idempotent instead of creating duplicate notifications.
+    dedupe_key = models.CharField(max_length=160, null=True, blank=True, unique=True)
+    email_status = models.CharField(
+        max_length=12,
+        choices=EmailStatus.choices,
+        default=EmailStatus.PENDING,
+        db_index=True,
+    )
+    email_attempts = models.PositiveSmallIntegerField(default=0)
+    email_last_error = models.CharField(max_length=300, blank=True)
+    email_sent_at = models.DateTimeField(null=True, blank=True)
+    email_last_attempt_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
-        indexes = [models.Index(fields=["student", "is_read"])]
+        indexes = [
+            models.Index(fields=["student", "is_read"]),
+            models.Index(fields=["email_status", "-created_at"]),
+        ]
 
     def __str__(self) -> str:
         return self.message
@@ -1005,7 +1114,11 @@ def _release_deleted_students_identity_links(sender, instance, **kwargs):
     PotentialMatch.objects.filter(
         Q(registered_student=instance) | Q(crush_entry__submitted_by=instance),
         status=PotentialMatch.Status.PENDING,
-    ).delete()
+    ).update(
+        status=PotentialMatch.Status.STALE,
+        invalidated_reason="Registered account was deleted; proposal retired.",
+        scored_at=timezone.now(),
+    )
 
 
 def default_minimum_age() -> int:

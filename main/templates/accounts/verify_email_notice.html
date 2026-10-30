@@ -12,10 +12,26 @@
   <div class="paper">
     <span class="stamp">ONE STEP</span>
     <h2 style="margin-top:12px">Check your inbox</h2>
-    <p class="muted">
-      We sent a confirmation link to your email. Open it to finish unlocking
-      your secret desk.
-    </p>
+    {% if email_status == "sent" %}
+      <p class="muted">
+        We sent a confirmation link to your email. Open it to finish unlocking
+        your secret desk.
+      </p>
+    {% elif email_status == "failed" %}
+      <p class="muted">
+        We couldn't deliver the last confirmation email. You can request a new
+        link below; failed messages are retried automatically.
+      </p>
+    {% elif email_status == "pending" or email_status == "sending" %}
+      <p class="muted">
+        Your confirmation email is queued and on its way. Open the link in it to
+        finish unlocking your secret desk.
+      </p>
+    {% else %}
+      <p class="muted">
+        Request a confirmation link below to finish unlocking your secret desk.
+      </p>
+    {% endif %}
 
     <form method="post" action="{% url 'accounts:resend_verification' %}">
       {% csrf_token %}

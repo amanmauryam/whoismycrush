@@ -360,6 +360,21 @@ ANALYTICS_DOMAIN = os.environ.get("ANALYTICS_DOMAIN", "")
 MATCH_EMAILS_ENABLED = env_bool("MATCH_EMAILS_ENABLED", True)
 MINIMUM_AGE = env_int("MINIMUM_AGE", 18)
 
+# Eligibility policy. Hard conflicts block a proposal / automatic identity
+# link; soft conflicts only lower the advisory score and stay visible to
+# reviewers. Missing values never count as conflicts. See campus/policy.py.
+MATCH_HARD_CONFLICT_FIELDS = os.environ.get(
+    "MATCH_HARD_CONFLICT_FIELDS", "course,year,section"
+)
+MATCH_MIN_CONFIDENCE = env_float("MATCH_MIN_CONFIDENCE", 40.0)
+MATCH_REQUIRE_ROLL_FOR_UNRESOLVED = env_bool(
+    "MATCH_REQUIRE_ROLL_FOR_UNRESOLVED", True
+)
+IDENTITY_HARD_CONFLICT_FIELDS = os.environ.get(
+    "IDENTITY_HARD_CONFLICT_FIELDS", "course,year,section"
+)
+NOTIFICATION_EMAIL_MAX_ATTEMPTS = env_int("NOTIFICATION_EMAIL_MAX_ATTEMPTS", 5)
+
 # Identity resolution is deliberately conservative. Auto-binding always needs
 # an exact campus + roll match, a close name, and no course/year/section
 # conflicts. Ambiguous entries go to the separate identity review desk.
@@ -381,6 +396,40 @@ IDENTITY_REQUIRE_STUDENT_VERIFICATION_FOR_AUTO = env_bool(
 # the product is reachable (accounts/middleware.py).
 EMAIL_VERIFICATION_REQUIRED = env_bool("EMAIL_VERIFICATION_REQUIRED", False)
 VERIFICATION_RESEND_COOLDOWN_SECONDS = env_int("VERIFICATION_RESEND_COOLDOWN_SECONDS", 60)
+
+# Registration asks before accepting an address whose domain exactly matches a
+# known common misspelling. This is intentionally a small, exact-match map, not
+# fuzzy matching, so legitimate custom college domains are never rejected.
+EMAIL_DOMAIN_SUGGESTIONS = {
+    "gmial.com": "gmail.com",
+    "gmal.com": "gmail.com",
+    "gamil.com": "gmail.com",
+    "gnail.com": "gmail.com",
+    "yaho.com": "yahoo.com",
+    "hotnail.com": "hotmail.com",
+    "hotmai.com": "hotmail.com",
+    "outlok.com": "outlook.com",
+    "outllok.com": "outlook.com",
+}
+
+# Verification mail is written to a durable outbox row and delivered outside
+# the registration request. The dispatcher thread is only a latency
+# optimisation; ``manage.py process_verification_emails`` is the crash-safe
+# recovery path (see docs/deployment.md). Some providers (Titan included) can
+# take 15-20 seconds to send their SMTP greeting while they run a reverse-DNS
+# or blocklist check, so the per-send timeout must be longer than the global
+# default while still bounding a dead server.
+VERIFICATION_EMAIL_ASYNC = env_bool("VERIFICATION_EMAIL_ASYNC", True)
+VERIFICATION_EMAIL_MAX_ATTEMPTS = env_int("VERIFICATION_EMAIL_MAX_ATTEMPTS", 5)
+VERIFICATION_EMAIL_TIMEOUT = env_int(
+    "VERIFICATION_EMAIL_TIMEOUT", max(EMAIL_TIMEOUT, 45)
+)
+VERIFICATION_EMAIL_STALE_SENDING_SECONDS = env_int(
+    "VERIFICATION_EMAIL_STALE_SENDING_SECONDS", 300
+)
+VERIFICATION_EMAIL_RETRY_AFTER_SECONDS = env_int(
+    "VERIFICATION_EMAIL_RETRY_AFTER_SECONDS", 60
+)
 
 MESSAGE_STORAGE = "django.contrib.messages.storage.fallback.FallbackStorage"
 
@@ -433,6 +482,11 @@ LOGGING = {
             "propagate": False,
         },
         "config": {
+            "handlers": ["console", "mail_admins"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "accounts": {
             "handlers": ["console", "mail_admins"],
             "level": "INFO",
             "propagate": False,

@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import admin, messages
 
 from .models import (
@@ -133,10 +134,11 @@ class MutualMatchAdmin(admin.ModelAdmin):
         "notified_at",
         "created_at",
     )
-    list_filter = ("status",)
+    list_filter = ("status", "notified_at", "created_at")
     search_fields = ("user_a__full_name", "user_b__full_name")
     autocomplete_fields = ("user_a", "user_b")
-    readonly_fields = ("notified_at",)
+    readonly_fields = ("notified_at", "created_at")
+    list_select_related = ("user_a", "user_b")
     actions = ["close_matches"]
 
     @admin.action(description="Close selected matches")
@@ -159,12 +161,13 @@ class PotentialMatchAdmin(admin.ModelAdmin):
         "registered_student",
         "confidence_score",
         "status",
+        "scoring_version",
         "is_reciprocal",
         "verified_by",
         "verified_at",
         "created_at",
     )
-    list_filter = ("status", "confidence_score", "created_at")
+    list_filter = ("status", "scoring_version", "confidence_score", "created_at")
     search_fields = (
         "crush_entry__full_name",
         "crush_entry__roll_number",
@@ -175,11 +178,35 @@ class PotentialMatchAdmin(admin.ModelAdmin):
     readonly_fields = (
         "confidence_score",
         "match_reasons",
+        "scoring_version",
+        "scored_at",
+        "invalidated_reason",
         "verified_at",
         "verified_by",
         "created_at",
     )
+    list_select_related = (
+        "crush_entry",
+        "crush_entry__submitted_by",
+        "registered_student",
+        "verified_by",
+        "mutual_match",
+    )
     actions = ["approve_selected", "reject_selected"]
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser or request.user.has_perm(
+            "campus.verify_potentialmatch"
+        )
+
+    def has_change_permission(self, request, obj=None):
+        return self.has_view_permission(request, obj)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
 
     @admin.action(description="Approve selected (creates mutual crush + notifies)")
     def approve_selected(self, request, queryset):
@@ -229,7 +256,7 @@ class IdentityCandidateAdmin(admin.ModelAdmin):
         "reviewed_at",
         "created_at",
     )
-    list_filter = ("status", "created_at")
+    list_filter = ("status", "scoring_version", "created_at")
     search_fields = (
         "crush_entry__full_name",
         "candidate__full_name",
@@ -240,12 +267,20 @@ class IdentityCandidateAdmin(admin.ModelAdmin):
         "confidence_score",
         "name_similarity",
         "evidence",
+        "scoring_version",
+        "scored_at",
         "reviewed_by",
         "reviewed_at",
         "created_at",
         "updated_at",
     )
-    actions = ["confirm_selected", "reject_selected", "defer_selected"]
+    list_select_related = ("crush_entry", "candidate", "reviewed_by")
+    actions = [
+        "confirm_selected",
+        "reject_selected",
+        "defer_selected",
+        "reopen_selected",
+    ]
 
     def has_view_permission(self, request, obj=None):
         return request.user.is_superuser or request.user.has_perm(
@@ -298,6 +333,12 @@ class IdentityCandidateAdmin(admin.ModelAdmin):
 
         self._run(request, queryset, defer_candidate, "Deferred")
 
+    @admin.action(description="Reopen selected closed identity candidates")
+    def reopen_selected(self, request, queryset):
+        from .identity_resolution import reopen_candidate
+
+        self._run(request, queryset, reopen_candidate, "Reopened")
+
 
 @admin.register(IdentityResolutionAudit)
 class IdentityResolutionAuditAdmin(admin.ModelAdmin):
@@ -309,6 +350,8 @@ class IdentityResolutionAuditAdmin(admin.ModelAdmin):
         "actor",
         "from_status",
         "to_status",
+        "candidate_from_status",
+        "candidate_to_status",
         "created_at",
     )
     list_filter = ("action", "created_at")
@@ -320,9 +363,12 @@ class IdentityResolutionAuditAdmin(admin.ModelAdmin):
         "action",
         "from_status",
         "to_status",
+        "candidate_from_status",
+        "candidate_to_status",
         "notes",
         "created_at",
     )
+    list_select_related = ("crush_entry", "candidate", "actor")
 
     def has_add_permission(self, request):
         return False
@@ -373,11 +419,51 @@ class CollegeInviteAdmin(admin.ModelAdmin):
 
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
-    list_display = ("student", "kind", "message", "is_read", "created_at")
-    list_filter = ("kind", "is_read")
-    search_fields = ("student__full_name", "message")
+    list_display = (
+        "student",
+        "kind",
+        "message",
+        "is_read",
+        "email_status",
+        "email_attempts",
+        "email_sent_at",
+        "created_at",
+    )
+    list_filter = ("kind", "is_read", "email_status", "created_at")
+    search_fields = ("student__full_name", "message", "dedupe_key")
     autocomplete_fields = ("student",)
-    actions = ["mark_read"]
+    readonly_fields = (
+        "dedupe_key",
+        "email_status",
+        "email_attempts",
+        "email_last_error",
+        "email_sent_at",
+        "email_last_attempt_at",
+        "created_at",
+    )
+    list_select_related = ("student",)
+    actions = ["mark_read", "retry_email"]
+
+    @admin.action(description="Retry failed or pending email")
+    def retry_email(self, request, queryset):
+        from .services import deliver_notification_email
+
+        sent = 0
+        attempts = getattr(settings, "NOTIFICATION_EMAIL_MAX_ATTEMPTS", 5)
+        for notification in queryset.filter(
+            email_status__in=[
+                Notification.EmailStatus.PENDING,
+                Notification.EmailStatus.FAILED,
+            ],
+            email_attempts__lt=attempts,
+        ):
+            if deliver_notification_email(notification.pk):
+                sent += 1
+        self.message_user(
+            request,
+            f"{sent} email(s) sent.",
+            level=messages.SUCCESS if sent else messages.WARNING,
+        )
 
     @admin.action(description="Mark read")
     def mark_read(self, request, queryset):

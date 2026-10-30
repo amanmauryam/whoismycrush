@@ -27,6 +27,8 @@ urlpatterns = [
     path("privacy/", views.privacy, name="privacy"),
     path("privacy/delete-crushes/", views.delete_crushes, name="delete_crushes"),
     path("privacy/delete-account/", views.delete_account, name="delete_account"),
+    # staff: combined review desk
+    path("staff/", views.staff_dashboard, name="staff_dashboard"),
     # staff: pending crush match verification
     path("staff/matches/", views.pending_matches, name="pending_matches"),
     path(
@@ -50,6 +52,11 @@ urlpatterns = [
         "staff/identities/<int:pk>/",
         views.identity_review_detail,
         name="identity_review_detail",
+    ),
+    path(
+        "staff/identities/bulk/",
+        views.identity_bulk_action,
+        name="identity_bulk_action",
     ),
     path(
         "staff/identities/<int:pk>/<str:action>/",

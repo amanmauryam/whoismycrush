@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+  <div class="breadcrumb">
+    <a href="{% url 'campus:landing' %}">Home</a> <span>→</span> <span>Staff desk</span>
+  </div>
+
+  <div class="page-head">
+    <p class="tiny-label">Private review area</p>
+    <h1>Staff review desk</h1>
+    <p>
+      One operational view of the queues. Nothing here is visible to students,
+      and no match is announced without a human decision.
+    </p>
+  </div>
+
+  {% include "campus/staff_nav.html" %}
+
+  <div class="notice-box">
+    {% include "components/icon.html" with name="shield" size=15 %}
+    Review from the source evidence, not the confidence score alone. Every
+    decision needs a short reason and is recorded in the audit trail.
+  </div>
+
+  {% if can_verify_matches %}
+    <section class="staff-section" aria-labelledby="match-desk-heading">
+      <div class="section-head">
+        <div>
+          <span class="section-label">Match review</span>
+          <h2 id="match-desk-heading">Reciprocal queue</h2>
+          <p class="muted small">
+            Only pairs where both people entered each other can be approved.
+          </p>
+        </div>
+      </div>
+
+      <div class="staff-metrics">
+        <a class="staff-metric" href="{% url 'campus:pending_matches' %}">
+          <span class="staff-metric-figure">{{ pending_pair_count }}</span>
+          <span class="staff-metric-label">Pending reciprocal matches</span>
+          <span class="staff-metric-note">Both sides waiting for a decision</span>
+        </a>
+        <a class="staff-metric is-warning" href="{% url 'campus:pending_matches' %}?blocked=1">
+          <span class="staff-metric-figure">{{ blocked_pair_count }}</span>
+          <span class="staff-metric-label">Blocked conflicts</span>
+          <span class="staff-metric-note">A block prevents approval</span>
+        </a>
+        <a class="staff-metric" href="{% url 'campus:pending_matches' %}#stale-proposals">
+          <span class="staff-metric-figure">{{ stale_count }}</span>
+          <span class="staff-metric-label">Stale proposals</span>
+          <span class="staff-metric-note">Kept for history; no longer eligible</span>
+        </a>
+      </div>
+
+      {% if match_queue %}
+        <div class="paper staff-queue">
+          <div class="staff-queue-head">
+            <h3>Next in the queue</h3>
+            <a class="small" href="{% url 'campus:pending_matches' %}">Open full queue</a>
+          </div>
+          <ul class="queue-list">
+            {% for pair in match_queue %}
+              <li class="queue-item">
+                <div class="queue-main">
+                  <strong>{{ pair.forward.author.full_name }}</strong>
+                  <span class="muted">entered</span>
+                  <strong>{{ pair.forward.crush_entry.full_name }}</strong>
+                  <span class="queue-vs" aria-hidden="true">↔</span>
+                  <strong>{{ pair.backward.author.full_name }}</strong>
+                  <span class="muted">entered</span>
+                  <strong>{{ pair.backward.crush_entry.full_name }}</strong>
+                  <span class="queue-meta">{{ pair.forward.crush_entry.college.name }}</span>
+                </div>
+                <div class="queue-side">
+                  {% if pair.is_blocked %}
+                    <span class="stamp">BLOCKED</span>
+                  {% endif %}
+                  <span class="score-pill">
+                    {% if pair.confidence %}{{ pair.confidence|floatformat:0 }}%{% else %}—{% endif %}
+                  </span>
+                  <a class="btn btn-sm" href="{% url 'campus:pending_match_detail' pair.forward.pk %}">Review</a>
+                </div>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <span class="doodle" aria-hidden="true">✓</span>
+          <h2>No reciprocal pairs waiting</h2>
+          <p class="muted">The match queue is clear right now.</p>
+        </div>
+      {% endif %}
+
+      {% if stale_queue %}
+        <div class="paper staff-subpanel" id="stale-proposals">
+          <div class="staff-queue-head">
+            <div>
+              <h3>Stale proposals</h3>
+              <p class="muted small">Preserved for audit. They cannot be approved unless the matching flow revives them.</p>
+            </div>
+            <span class="score-pill">{{ stale_count }} total</span>
+          </div>
+          <ul class="queue-list">
+            {% for proposal in stale_queue %}
+              <li class="queue-item">
+                <div class="queue-main">
+                  <strong>{{ proposal.author.full_name }}</strong>
+                  <span class="muted">entered</span>
+                  <strong>{{ proposal.crush_entry.full_name }}</strong>
+                  <span class="queue-meta">{{ proposal.invalidated_reason|default:"No longer eligible." }}</span>
+                </div>
+                <a class="btn btn-sm" href="{% url 'campus:pending_match_detail' proposal.pk %}">Inspect</a>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  {% if can_review_identities %}
+    <section class="staff-section" aria-labelledby="identity-desk-heading">
+      <div class="section-head">
+        <div>
+          <span class="section-label">Identity review</span>
+          <h2 id="identity-desk-heading">Ambiguous entries</h2>
+          <p class="muted small">
+            Resolve who the typed crush is before their entry can join match review.
+          </p>
+        </div>
+      </div>
+
+      <div class="staff-metrics">
+        <a class="staff-metric is-warning" href="{% url 'campus:identity_review' %}?status=needs_review">
+          <span class="staff-metric-figure">{{ identity_review_count }}</span>
+          <span class="staff-metric-label">Pending identity reviews</span>
+          <span class="staff-metric-note">Multiple or conflicting candidates</span>
+        </a>
+        <a class="staff-metric" href="{% url 'campus:identity_review' %}">
+          <span class="staff-metric-figure">{{ unresolved_identity_count }}</span>
+          <span class="staff-metric-label">Unresolved entries</span>
+          <span class="staff-metric-note">Includes candidates, pending and parked entries</span>
+        </a>
+      </div>
+
+      {% if identity_queue %}
+        <div class="paper staff-queue">
+          <div class="staff-queue-head">
+            <h3>Needs a human</h3>
+            <a class="small" href="{% url 'campus:identity_review' %}?status=needs_review">Open identity queue</a>
+          </div>
+          <ul class="queue-list">
+            {% for entry in identity_queue %}
+              <li class="queue-item">
+                <div class="queue-main">
+                  <strong>{{ entry.full_name }}</strong>
+                  <span class="muted">typed by {{ entry.submitted_by.full_name }}</span>
+                  <span class="queue-meta">
+                    {{ entry.college.name }} · {{ entry.get_identity_status_display }}
+                    · {{ entry.open_candidate_count }} open candidate{{ entry.open_candidate_count|pluralize }}
+                  </span>
+                </div>
+                <a class="btn btn-sm" href="{% url 'campus:identity_review_detail' entry.pk %}">Review</a>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <span class="doodle" aria-hidden="true">✓</span>
+          <h2>No identity decisions waiting</h2>
+          <p class="muted">Every typed identity currently has a safe outcome.</p>
+        </div>
+      {% endif %}
+    </section>
+  {% endif %}
+</div>
+{% endblock %}

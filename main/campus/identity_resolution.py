@@ -30,6 +30,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from . import policy
 from .matching import name_similarity, normalize_text
 from .models import (
     Block,
@@ -42,6 +43,8 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+IDENTITY_SCORING_VERSION = "identity-v2"
+
 # Explainable identity weights. They sum to 100 when every attribute matches.
 W_ROLL = 45.0
 W_NAME = 30.0
@@ -50,6 +53,17 @@ W_COURSE = 8.0
 W_YEAR = 5.0
 W_SECTION = 4.0
 W_DEPARTMENT = 3.0
+
+#: Human-readable labels and maximum points for the review-desk breakdown.
+IDENTITY_COMPONENT_LABELS = {
+    "roll": ("Roll number", W_ROLL),
+    "name": ("Name similarity", W_NAME),
+    "nickname": ("Nickname", W_NICKNAME),
+    "course": ("Course", W_COURSE),
+    "year": ("Year", W_YEAR),
+    "section": ("Section", W_SECTION),
+    "department": ("Department", W_DEPARTMENT),
+}
 
 #: Name score buckets. Exact names are the only name signal strong enough to
 #: contribute meaningfully on its own; variants get partial credit so a human
@@ -77,10 +91,17 @@ class ScoredCandidate:
     roll_exact: bool = False
     roll_conflict: bool = False
     auto_resolvable: bool = False
+    components: dict[str, float] = field(default_factory=dict)
 
     @property
     def hard_conflict(self) -> bool:
-        return bool(self.roll_conflict or self.conflicts)
+        # Roll number conflict is a hard conflict
+        if self.roll_conflict:
+            return True
+        # Check if any conflict is in hard fields per policy
+        if self.conflicts:
+            return True
+        return False
 
     @property
     def evidence(self) -> dict:
@@ -91,6 +112,9 @@ class ScoredCandidate:
             "reasons": list(self.reasons),
             "conflicts": list(self.conflicts),
             "score": self.score,
+            "components": {
+                key: round(float(value), 2) for key, value in self.components.items()
+            },
         }
 
 
@@ -194,6 +218,8 @@ def score_candidate(entry: CrushEntry, student: StudentProfile) -> ScoredCandida
     reasons: list[str] = []
     conflicts: list[str] = []
     score = 0.0
+    components: dict[str, float] = {}
+    hard_fields = policy.identity_hard_fields()
 
     if entry.college_id != student.college_id:
         return ScoredCandidate(student, 0.0, 0.0, conflicts=["different campus"])
@@ -210,8 +236,10 @@ def score_candidate(entry: CrushEntry, student: StudentProfile) -> ScoredCandida
         and entry.normalized_roll_number == student.normalized_roll_number
     )
     roll_conflict = bool(entry.normalized_roll_number and not roll_exact)
+    components["roll"] = 0.0
     if roll_exact:
         score += W_ROLL
+        components["roll"] = W_ROLL
         reasons.append("campus + roll number match")
     elif roll_conflict:
         conflicts.append("different roll number")
@@ -226,6 +254,7 @@ def score_candidate(entry: CrushEntry, student: StudentProfile) -> ScoredCandida
             name_points = points
             break
     score += name_points
+    components["name"] = name_points
     if similarity >= 0.999:
         reasons.append("name matches exactly")
     elif similarity >= 0.92:
@@ -239,43 +268,61 @@ def score_candidate(entry: CrushEntry, student: StudentProfile) -> ScoredCandida
     else:
         conflicts.append("name differs")
 
+    components["nickname"] = 0.0
     if entry.nickname and student.nickname:
         if normalize_text(entry.nickname) == normalize_text(student.nickname):
             score += W_NICKNAME
+            components["nickname"] = W_NICKNAME
             reasons.append("nickname matches")
 
     # -- corroborating attributes -----------------------------------------
+    components["course"] = 0.0
     if entry.course == student.course:
         score += W_COURSE
+        components["course"] = W_COURSE
         reasons.append("course matches")
-    else:
+    elif "course" in hard_fields:
         conflicts.append(f"course says {entry.get_course_display()}")
+    else:
+        reasons.append("course differs (soft conflict)")
 
+    components["year"] = 0.0
     if entry.year == student.year:
         score += W_YEAR
+        components["year"] = W_YEAR
         reasons.append("year matches")
-    else:
+    elif "year" in hard_fields:
         conflicts.append(f"year says {entry.get_year_display()}")
+    else:
+        reasons.append("year differs (soft conflict)")
 
+    components["section"] = 0.0
     entry_section = normalize_text(entry.section)
     student_section = normalize_text(student.section)
     if entry_section and student_section:
         if entry_section == student_section:
             score += W_SECTION
+            components["section"] = W_SECTION
             reasons.append("section matches")
-        else:
+        elif "section" in hard_fields:
             conflicts.append(f"section says {entry.section}")
+        else:
+            reasons.append("section differs (soft conflict)")
 
+    components["department"] = 0.0
     entry_dept = normalize_text(entry.department)
     student_dept = normalize_text(student.department)
     if entry_dept and student_dept:
         if entry_dept == student_dept:
             score += W_DEPARTMENT
+            components["department"] = W_DEPARTMENT
             reasons.append("department matches")
     elif not entry_dept and not student_dept:
-        score += W_DEPARTMENT * 0.4
+        components["department"] = W_DEPARTMENT * 0.4
+        score += components["department"]
     else:
-        score += W_DEPARTMENT * 0.25
+        components["department"] = W_DEPARTMENT * 0.25
+        score += components["department"]
 
     confidence = round(min(score, 100.0), 2)
 
@@ -300,6 +347,7 @@ def score_candidate(entry: CrushEntry, student: StudentProfile) -> ScoredCandida
         roll_exact=roll_exact,
         roll_conflict=roll_conflict,
         auto_resolvable=auto_ok,
+        components=components,
     )
 
 
@@ -353,6 +401,7 @@ def _sync_candidate_rows(
     }
     keep_ids = {candidate.student.pk for candidate in scored}
     multiple = len(scored) > 1
+    now = timezone.now()
 
     rows: dict[int, IdentityCandidate] = {}
     for candidate in scored:
@@ -372,6 +421,8 @@ def _sync_candidate_rows(
             "name_similarity": round(candidate.name_similarity, 3),
             "evidence": candidate.evidence,
             "status": row.status if reviewed else default_status,
+            "scoring_version": IDENTITY_SCORING_VERSION,
+            "scored_at": now,
         }
         if row is None:
             try:
@@ -390,6 +441,8 @@ def _sync_candidate_rows(
             row.confidence_score = candidate.score
             row.name_similarity = round(candidate.name_similarity, 3)
             row.evidence = candidate.evidence
+            row.scoring_version = IDENTITY_SCORING_VERSION
+            row.scored_at = now
             if not reviewed:
                 row.status = default_status
             row.save(
@@ -398,6 +451,8 @@ def _sync_candidate_rows(
                     "name_similarity",
                     "evidence",
                     "status",
+                    "scoring_version",
+                    "scored_at",
                     "updated_at",
                 ]
             )
@@ -425,6 +480,8 @@ def _audit(
     candidate: StudentProfile | None = None,
     from_status: str = "",
     to_status: str = "",
+    candidate_from_status: str = "",
+    candidate_to_status: str = "",
     notes: str = "",
 ) -> None:
     IdentityResolutionAudit.objects.create(
@@ -434,6 +491,8 @@ def _audit(
         action=action,
         from_status=from_status,
         to_status=to_status,
+        candidate_from_status=candidate_from_status,
+        candidate_to_status=candidate_to_status,
         notes=notes[:300],
     )
 
@@ -460,28 +519,60 @@ def bind_identity(
             raise IdentityResolutionError("This crush entry is no longer active.")
         if locked.submitted_by_id == student.pk:
             raise IdentityResolutionError("A student cannot be their own crush.")
+        if locked.college_id != locked.submitted_by.college_id:
+            raise IdentityResolutionError("A crush cannot cross a campus boundary.")
         if locked.college_id != student.college_id:
             raise IdentityResolutionError("A crush cannot cross a campus boundary.")
         if not student.user.is_active:
             raise IdentityResolutionError("That account is not active.")
         if student.pk in _blocked_ids(locked.submitted_by):
             raise IdentityResolutionError("A block prevents this identity link.")
-        if (
-            locked.resolved_student_id
-            and locked.resolved_student_id != student.pk
-            and not force
-        ):
-            raise IdentityResolutionError(
-                "This entry is already resolved to a different student."
-            )
+        now = timezone.now()
+
+        row = IdentityCandidate.objects.filter(
+            crush_entry=locked, candidate=student
+        ).first()
+        already_bound = (
+            locked.resolved_student_id == student.pk
+            and locked.identity_status == CrushEntry.ResolutionStatus.RESOLVED
+        )
+        if already_bound:
+            # Idempotent retry: keep the binding and repair a missing candidate
+            # row, but never append another audit event or overwrite a human
+            # reviewer's notes with system text.
+            if row is not None and row.status != IdentityCandidate.Status.CONFIRMED:
+                row.status = IdentityCandidate.Status.CONFIRMED
+                row.confidence_score = confidence
+                row.scored_at = now
+                row.scoring_version = IDENTITY_SCORING_VERSION
+                row.save(
+                    update_fields=[
+                        "status",
+                        "confidence_score",
+                        "scored_at",
+                        "scoring_version",
+                        "updated_at",
+                    ]
+                )
+            entry.refresh_from_db()
+            return entry
+
+        if locked.resolved_student_id and locked.resolved_student_id != student.pk:
+            if not force:
+                raise IdentityResolutionError(
+                    "This entry is already resolved to a different student. "
+                    "Reject or invalidate the existing link before rebinding."
+                )
 
         previous_status = locked.identity_status
-        now = timezone.now()
+        previous_candidate_status = row.status if row is not None else ""
         locked.resolved_student = student
         locked.resolved_at = now
         locked.resolution_confidence = confidence
         locked.resolution_method = method
         locked.resolution_notes = notes[:300]
+        locked.resolution_scoring_version = IDENTITY_SCORING_VERSION
+        locked.resolution_scored_at = now
         locked.identity_status = CrushEntry.ResolutionStatus.RESOLVED
         locked.save(
             update_fields=[
@@ -490,16 +581,17 @@ def bind_identity(
                 "resolution_confidence",
                 "resolution_method",
                 "resolution_notes",
+                "resolution_scoring_version",
+                "resolution_scored_at",
                 "identity_status",
             ]
         )
 
-        row = IdentityCandidate.objects.filter(
-            crush_entry=locked, candidate=student
-        ).first()
         if row is not None:
             row.status = IdentityCandidate.Status.CONFIRMED
             row.confidence_score = confidence
+            row.scoring_version = IDENTITY_SCORING_VERSION
+            row.scored_at = now
             row.reviewed_by = actor if getattr(actor, "pk", None) else None
             row.reviewed_at = now if actor else row.reviewed_at
             if notes:
@@ -508,6 +600,8 @@ def bind_identity(
                 update_fields=[
                     "status",
                     "confidence_score",
+                    "scoring_version",
+                    "scored_at",
                     "reviewed_by",
                     "reviewed_at",
                     "review_notes",
@@ -538,6 +632,8 @@ def bind_identity(
             candidate=student,
             from_status=previous_status,
             to_status=locked.identity_status,
+            candidate_from_status=previous_candidate_status,
+            candidate_to_status=IdentityCandidate.Status.CONFIRMED,
             notes=notes or method,
         )
 
@@ -570,12 +666,15 @@ def invalidate_resolution(
                 to_status=to_status,
                 notes=reason,
             )
+        now = timezone.now()
         locked.identity_status = to_status
         locked.resolved_student = None
         locked.resolved_at = None
         locked.resolution_confidence = None
         locked.resolution_method = ""
         locked.resolution_notes = reason[:300]
+        locked.resolution_scoring_version = IDENTITY_SCORING_VERSION
+        locked.resolution_scored_at = now
         locked.save(
             update_fields=[
                 "identity_status",
@@ -584,13 +683,29 @@ def invalidate_resolution(
                 "resolution_confidence",
                 "resolution_method",
                 "resolution_notes",
+                "resolution_scoring_version",
+                "resolution_scored_at",
             ]
         )
-        # Pending match proposals must not survive an invalid identity. An
-        # already-approved match is a human decision and is left for review.
+        # Pending match proposals must not survive an invalid identity. Retire
+        # them as STALE so the reason survives for audit. An already-approved
+        # match is a human decision and is left for review.
         PotentialMatch.objects.filter(
             crush_entry=locked, status=PotentialMatch.Status.PENDING
-        ).delete()
+        ).update(
+            status=PotentialMatch.Status.STALE,
+            invalidated_reason=reason[:300],
+            scored_at=now,
+        )
+        # If we invalidated a resolved link, any confirmed identity candidate
+        # tied to that resolved student should no longer remain confirmed
+        if locked.resolved_student_id is None and previous == CrushEntry.ResolutionStatus.RESOLVED:
+            # Supersede confirmed candidates that pointed to the old resolved student
+            from .models import IdentityCandidate
+
+            IdentityCandidate.objects.filter(
+                crush_entry=locked, status=IdentityCandidate.Status.CONFIRMED
+            ).update(status=IdentityCandidate.Status.SUPERSEDED, updated_at=now)
 
     entry.refresh_from_db()
     return entry
@@ -598,16 +713,50 @@ def invalidate_resolution(
 
 def _set_status(entry: CrushEntry, status: str, reason: str = "") -> CrushEntry:
     if entry.identity_status == status and (not reason or entry.resolution_notes == reason):
+        entry.resolution_scoring_version = IDENTITY_SCORING_VERSION
+        entry.resolution_scored_at = timezone.now()
+        entry.save(
+            update_fields=["resolution_scoring_version", "resolution_scored_at"]
+        )
         return entry
     previous = entry.identity_status
     entry.identity_status = status
     if reason:
         entry.resolution_notes = reason[:300]
-    entry.save(update_fields=["identity_status", "resolution_notes"])
+    entry.resolution_scoring_version = IDENTITY_SCORING_VERSION
+    entry.resolution_scored_at = timezone.now()
+    entry.save(
+        update_fields=[
+            "identity_status",
+            "resolution_notes",
+            "resolution_scoring_version",
+            "resolution_scored_at",
+        ]
+    )
     logger.debug(
         "identity_status entry=%s from=%s to=%s", entry.pk, previous, status
     )
     return entry
+
+
+def _blocking_identity_conflicts(scored: ScoredCandidate) -> list[str]:
+    """Conflicts that must break an existing link.
+
+    A name correction is explicitly *not* one of them: the roll number is the
+    identity key, and the student may fix a misspelled name without losing the
+    verified relationship. Roll and hard-field conflicts still block.
+    """
+
+    conflicts = [str(conflict) for conflict in (scored.conflicts or [])]
+    if scored.roll_conflict and not any(
+        "roll" in conflict.lower() for conflict in conflicts
+    ):
+        conflicts.append("different roll number")
+    return [
+        conflict
+        for conflict in conflicts
+        if conflict.strip().lower() != "name differs"
+    ]
 
 
 def resolve_entry(
@@ -629,6 +778,12 @@ def resolve_entry(
         return entry
     if entry.identity_status == CrushEntry.ResolutionStatus.UNRESOLVABLE and not force:
         return entry
+    if entry.college_id != entry.submitted_by.college_id:
+        return invalidate_resolution(
+            entry,
+            "A crush must stay within the submitting student's campus.",
+            actor=actor,
+        )
 
     scored = generate_candidates(entry)
     _sync_candidate_rows(entry, scored, actor=actor)
@@ -643,37 +798,122 @@ def resolve_entry(
 
     # -- existing verified link: keep, refresh, or invalidate ---------------
     if current is not None:
+        try:
+            if entry.submitted_by_id == current.pk:
+                invalidate_resolution(entry, "Self-match is not allowed.", actor=actor)
+                current = None
+                current_scored = None
+            elif getattr(entry, "college_id") and getattr(current, "college_id") and entry.college_id != current.college_id:
+                invalidate_resolution(entry, "Cross-campus identity is not allowed.", actor=actor)
+                current = None
+                current_scored = None
+            elif current.user_id and not getattr(current.user, "is_active", True):
+                invalidate_resolution(entry, "Account is no longer active.", actor=actor)
+                current = None
+                current_scored = None
+            elif current.pk in _blocked_ids(entry.submitted_by):
+                invalidate_resolution(entry, "A block prevents this identity link.", actor=actor)
+                current = None
+                current_scored = None
+        except Exception:
+            pass
+    if current is not None:
         auto = auto_candidates[0] if len(auto_candidates) == 1 else None
+        is_manual = getattr(entry, "resolution_method", "") in ("admin_confirmed",) or bool(
+            IdentityCandidate.objects.filter(
+                crush_entry=entry, candidate=current, status=IdentityCandidate.Status.CONFIRMED
+            ).exclude(reviewed_by=None).exists()
+        ) or getattr(entry, "resolution_method", "").startswith("admin")
+        # Better check: look up confirmed candidate for this entry+student
         if auto is not None and auto.student.pk != current.pk:
-            invalidate_resolution(
-                entry,
-                "Entry evidence now points to a different candidate.",
-                actor=actor,
-            )
-            current = None
-            current_scored = None
+            # Don't blindly invalidate a manual confirmation
+            if is_manual or getattr(entry, "resolution_method", "") == "admin_confirmed":
+                entry.resolution_confidence = current_scored.score if current_scored else entry.resolution_confidence
+                entry.resolution_scoring_version = IDENTITY_SCORING_VERSION
+                entry.resolution_scored_at = timezone.now()
+                entry.save(
+                    update_fields=[
+                        "resolution_confidence",
+                        "resolution_scoring_version",
+                        "resolution_scored_at",
+                    ]
+                )
+            else:
+                invalidate_resolution(
+                    entry,
+                    "Entry evidence now points to a different candidate.",
+                    actor=actor,
+                )
+                current = None
+                current_scored = None
         elif current_scored is None:
-            invalidate_resolution(
-                entry,
-                "The verified student no longer matches the submitted details.",
-                actor=actor,
-                to_status=CrushEntry.ResolutionStatus.NEEDS_REVIEW,
-            )
-            current = None
-        elif current_scored.hard_conflict:
-            invalidate_resolution(
-                entry,
-                "A course, year or section conflict needs human review.",
-                actor=actor,
-                to_status=CrushEntry.ResolutionStatus.NEEDS_REVIEW,
-            )
-            current = None
+            # If manually confirmed and we just can't find current in re-scoring due to
+            # bad entry data, don't invalidate
+            if is_manual or getattr(entry, "resolution_method", "") == "admin_confirmed":
+                entry.resolution_scoring_version = IDENTITY_SCORING_VERSION
+                entry.resolution_scored_at = timezone.now()
+                entry.save(
+                    update_fields=[
+                        "resolution_scoring_version",
+                        "resolution_scored_at",
+                    ]
+                )
+            else:
+                invalidate_resolution(
+                    entry,
+                    "The verified student no longer matches the submitted details.",
+                    actor=actor,
+                    to_status=CrushEntry.ResolutionStatus.NEEDS_REVIEW,
+                )
+                current = None
         else:
-            # A name correction on an already-verified student is not a reason
-            # to destroy the link. Keep the verified roll identity and update
-            # the advisory confidence score.
-            entry.resolution_confidence = current_scored.score
-            entry.save(update_fields=["resolution_confidence"])
+            blocking_conflicts = _blocking_identity_conflicts(current_scored)
+            if is_manual or getattr(entry, "resolution_method", "") == "admin_confirmed":
+                entry.resolution_confidence = current_scored.score
+                entry.resolution_scoring_version = IDENTITY_SCORING_VERSION
+                entry.resolution_scored_at = timezone.now()
+                entry.save(
+                    update_fields=[
+                        "resolution_confidence",
+                        "resolution_scoring_version",
+                        "resolution_scored_at",
+                    ]
+                )
+            elif blocking_conflicts:
+                if any("roll" in conflict.lower() for conflict in blocking_conflicts):
+                    msg = "Roll number conflict needs human review."
+                elif any(
+                    field in conflict.lower()
+                    for field in ("course", "year", "section")
+                    for conflict in blocking_conflicts
+                ):
+                    msg = "A course, year or section conflict needs human review."
+                else:
+                    msg = (
+                        "; ".join(blocking_conflicts)[:200]
+                        or "Identity conflict needs human review."
+                    )
+                invalidate_resolution(
+                    entry,
+                    msg,
+                    actor=actor,
+                    to_status=CrushEntry.ResolutionStatus.NEEDS_REVIEW,
+                )
+                current = None
+            else:
+                # A name correction on an already-verified student is not a
+                # reason to destroy the link. Keep the verified roll identity
+                # and update the advisory confidence score.
+                entry.resolution_confidence = current_scored.score
+                entry.resolution_scoring_version = IDENTITY_SCORING_VERSION
+                entry.resolution_scored_at = timezone.now()
+                entry.save(
+                    update_fields=[
+                        "resolution_confidence",
+                        "resolution_scoring_version",
+                        "resolution_scored_at",
+                    ]
+                )
 
     # -- no verified link: auto-bind only the single safe candidate ---------
     if current is None and len(auto_candidates) == 1:
@@ -746,7 +986,10 @@ def _possible_entries_for(student: StudentProfile) -> list[CrushEntry]:
             CrushEntry.ResolutionStatus.NEEDS_REVIEW,
         ]
     )
-    possible = Q(resolved_student=student)
+    possible = Q(resolved_student=student) | Q(
+        potential_matches__registered_student=student,
+        potential_matches__status=PotentialMatch.Status.PENDING,
+    )
     if student.normalized_roll_number:
         possible |= Q(normalized_roll_number=student.normalized_roll_number)
     if student.normalized_name:
@@ -770,8 +1013,16 @@ def refresh_for_student(student: StudentProfile) -> list[PotentialMatch]:
 
     from . import matching
 
+    entries = {entry.pk: entry for entry in _possible_entries_for(student)}
+    for entry in (
+        CrushEntry.objects.active()
+        .filter(submitted_by=student)
+        .select_related("submitted_by", "college", "resolved_student")
+    ):
+        entries[entry.pk] = entry
+
     created: list[PotentialMatch] = []
-    for entry in _possible_entries_for(student):
+    for entry in entries.values():
         resolve_entry(entry)
         created.extend(matching.propose_for_entry(entry, resolve=False))
     return created
@@ -780,13 +1031,39 @@ def refresh_for_student(student: StudentProfile) -> list[PotentialMatch]:
 def confirm_candidate(
     candidate: IdentityCandidate, actor, *, notes: str = ""
 ) -> CrushEntry:
-    """Reviewer confirms a candidate, binding it explicitly."""
+    """Reviewer confirms a candidate, binding it explicitly.
+
+    Idempotent for an already-confirmed row. Rejected, deferred and superseded
+    rows must be explicitly reopened first, so a reviewer can never revive an
+    old decision by accident.
+    """
 
     with transaction.atomic():
-        candidate = IdentityCandidate.objects.select_related(
-            "crush_entry", "candidate"
-        ).get(pk=candidate.pk)
+        candidate = (
+            IdentityCandidate.objects.select_for_update()
+            .select_related("crush_entry", "candidate")
+            .get(pk=candidate.pk)
+        )
         entry = candidate.crush_entry
+
+        if candidate.status == IdentityCandidate.Status.CONFIRMED and (
+            entry.resolved_student_id == candidate.candidate_id
+        ):
+            if notes and notes != candidate.review_notes:
+                candidate.review_notes = notes
+                candidate.save(update_fields=["review_notes", "updated_at"])
+            entry.refresh_from_db()
+            return entry
+
+        if candidate.status in {
+            IdentityCandidate.Status.REJECTED,
+            IdentityCandidate.Status.DEFERRED,
+            IdentityCandidate.Status.SUPERSEDED,
+        }:
+            raise IdentityResolutionError(
+                "Reopen this candidate before confirming it."
+            )
+
         bind_identity(
             entry,
             candidate.candidate,
@@ -794,7 +1071,6 @@ def confirm_candidate(
             confidence=float(candidate.confidence_score or 0),
             actor=actor,
             notes=notes,
-            force=True,
         )
         candidate.refresh_from_db()
         candidate.status = IdentityCandidate.Status.CONFIRMED
@@ -824,11 +1100,20 @@ def reject_candidate(
     """Reviewer rejects a candidate. The row stays rejected and cannot auto-bind."""
 
     with transaction.atomic():
-        candidate = IdentityCandidate.objects.select_related(
-            "crush_entry", "candidate"
-        ).get(pk=candidate.pk)
+        candidate = (
+            IdentityCandidate.objects.select_for_update()
+            .select_related("crush_entry", "candidate")
+            .get(pk=candidate.pk)
+        )
         entry = candidate.crush_entry
+        if candidate.status == IdentityCandidate.Status.REJECTED:
+            if notes and notes != candidate.review_notes:
+                candidate.review_notes = notes
+                candidate.save(update_fields=["review_notes", "updated_at"])
+            entry.refresh_from_db()
+            return entry
         previous = entry.identity_status
+        previous_candidate_status = candidate.status
         candidate.status = IdentityCandidate.Status.REJECTED
         candidate.reviewed_by = actor
         candidate.reviewed_at = timezone.now()
@@ -856,6 +1141,8 @@ def reject_candidate(
             candidate=candidate.candidate,
             from_status=previous,
             to_status=entry.identity_status,
+            candidate_from_status=previous_candidate_status,
+            candidate_to_status=IdentityCandidate.Status.REJECTED,
             notes=notes,
         )
     entry.refresh_from_db()
@@ -873,11 +1160,20 @@ def defer_candidate(
     """Reviewer parks a candidate. It is preserved but never auto-bound."""
 
     with transaction.atomic():
-        candidate = IdentityCandidate.objects.select_related(
-            "crush_entry", "candidate"
-        ).get(pk=candidate.pk)
+        candidate = (
+            IdentityCandidate.objects.select_for_update()
+            .select_related("crush_entry", "candidate")
+            .get(pk=candidate.pk)
+        )
         entry = candidate.crush_entry
+        if candidate.status == IdentityCandidate.Status.DEFERRED:
+            if notes and notes != candidate.review_notes:
+                candidate.review_notes = notes
+                candidate.save(update_fields=["review_notes", "updated_at"])
+            entry.refresh_from_db()
+            return entry
         previous = entry.identity_status
+        previous_candidate_status = candidate.status
         candidate.status = IdentityCandidate.Status.DEFERRED
         candidate.reviewed_by = actor
         candidate.reviewed_at = timezone.now()
@@ -905,7 +1201,57 @@ def defer_candidate(
             candidate=candidate.candidate,
             from_status=previous,
             to_status=entry.identity_status,
+            candidate_from_status=previous_candidate_status,
+            candidate_to_status=IdentityCandidate.Status.DEFERRED,
             notes=notes,
+        )
+    entry.refresh_from_db()
+    return entry
+
+
+def reopen_candidate(
+    candidate: IdentityCandidate, actor, *, notes: str = ""
+) -> CrushEntry:
+    """Undo a sticky reject/defer so the candidate can be reviewed again."""
+
+    with transaction.atomic():
+        candidate = (
+            IdentityCandidate.objects.select_for_update()
+            .select_related("crush_entry", "candidate")
+            .get(pk=candidate.pk)
+        )
+        if candidate.status not in {
+            IdentityCandidate.Status.REJECTED,
+            IdentityCandidate.Status.DEFERRED,
+            IdentityCandidate.Status.SUPERSEDED,
+        }:
+            raise IdentityResolutionError("Only a closed candidate can be reopened.")
+        entry = candidate.crush_entry
+        previous = entry.identity_status
+        previous_candidate_status = candidate.status
+        candidate.status = IdentityCandidate.Status.NEEDS_REVIEW
+        candidate.reviewed_by = actor
+        candidate.reviewed_at = timezone.now()
+        candidate.review_notes = notes
+        candidate.save(
+            update_fields=[
+                "status",
+                "reviewed_by",
+                "reviewed_at",
+                "review_notes",
+                "updated_at",
+            ]
+        )
+        _audit(
+            entry,
+            IdentityResolutionAudit.Action.REOPENED,
+            actor=actor,
+            candidate=candidate.candidate,
+            from_status=previous,
+            to_status=previous,
+            candidate_from_status=previous_candidate_status,
+            candidate_to_status=IdentityCandidate.Status.NEEDS_REVIEW,
+            notes=notes or "Identity candidate reopened.",
         )
     entry.refresh_from_db()
     return entry
@@ -917,12 +1263,15 @@ def mark_unresolvable(entry: CrushEntry, actor, *, notes: str = "") -> CrushEntr
     with transaction.atomic():
         entry = CrushEntry.objects.select_for_update().get(pk=entry.pk)
         previous = entry.identity_status
+        now = timezone.now()
         entry.identity_status = CrushEntry.ResolutionStatus.UNRESOLVABLE
         entry.resolved_student = None
         entry.resolved_at = None
         entry.resolution_confidence = None
         entry.resolution_method = ""
         entry.resolution_notes = notes[:300]
+        entry.resolution_scoring_version = IDENTITY_SCORING_VERSION
+        entry.resolution_scored_at = now
         entry.save(
             update_fields=[
                 "identity_status",
@@ -931,11 +1280,17 @@ def mark_unresolvable(entry: CrushEntry, actor, *, notes: str = "") -> CrushEntr
                 "resolution_confidence",
                 "resolution_method",
                 "resolution_notes",
+                "resolution_scoring_version",
+                "resolution_scored_at",
             ]
         )
         PotentialMatch.objects.filter(
             crush_entry=entry, status=PotentialMatch.Status.PENDING
-        ).delete()
+        ).update(
+            status=PotentialMatch.Status.STALE,
+            invalidated_reason="Entry was marked unresolvable.",
+            scored_at=now,
+        )
         _audit(
             entry,
             IdentityResolutionAudit.Action.UNRESOLVABLE,
@@ -973,9 +1328,14 @@ def retire_entry(entry: CrushEntry, *, actor=None) -> None:
 
     with transaction.atomic():
         entry = CrushEntry.objects.select_for_update().get(pk=entry.pk)
+        now = timezone.now()
         PotentialMatch.objects.filter(
             crush_entry=entry, status=PotentialMatch.Status.PENDING
-        ).delete()
+        ).update(
+            status=PotentialMatch.Status.STALE,
+            invalidated_reason="Crush entry was removed.",
+            scored_at=now,
+        )
         IdentityCandidate.objects.filter(
             crush_entry=entry,
             status__in=[
@@ -997,6 +1357,8 @@ def retire_entry(entry: CrushEntry, *, actor=None) -> None:
         entry.resolved_at = None
         entry.resolution_confidence = None
         entry.resolution_method = ""
+        entry.resolution_scoring_version = IDENTITY_SCORING_VERSION
+        entry.resolution_scored_at = now
         entry.identity_status = CrushEntry.ResolutionStatus.PENDING
         entry.save(
             update_fields=[
@@ -1004,6 +1366,8 @@ def retire_entry(entry: CrushEntry, *, actor=None) -> None:
                 "resolved_at",
                 "resolution_confidence",
                 "resolution_method",
+                "resolution_scoring_version",
+                "resolution_scored_at",
                 "identity_status",
             ]
         )

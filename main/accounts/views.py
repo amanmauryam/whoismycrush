@@ -9,19 +9,23 @@ from django.contrib.auth.views import (
     PasswordResetView,
 )
 from django.contrib.auth.decorators import login_required
+from django.db import IntegrityError, transaction
 from django.shortcuts import redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.utils.encoding import force_str
-from django.utils.http import urlsafe_base64_decode
+from django.utils.http import url_has_allowed_host_and_scheme, urlsafe_base64_decode
 from django.views.decorators.http import require_POST
+import time
+import logging
 
 from config.ratelimit import ratelimit
 
 from .emails import check_verification_token, mark_verified, send_verification_email
 from .forms import LoginForm, RegisterForm
-from .models import email_is_verified
+from .models import EmailVerification, email_is_verified
 
+logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
@@ -34,38 +38,127 @@ def _landing_for(user):
     return redirect("campus:dashboard")
 
 
+def _safe_post_next(request, fallback: str) -> str:
+    """Only follow a posted ``next`` URL when it stays on this host."""
+
+    target = request.POST.get("next") or ""
+    if target and url_has_allowed_host_and_scheme(
+        target,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return target
+    return fallback
+
+
+def _verification_status(user):
+    """Read the outbox row directly so a stale reverse cache cannot lie."""
+
+    return (
+        EmailVerification.objects.filter(user=user)
+        .values_list("email_status", flat=True)
+        .first()
+    )
+
+
 @ratelimit(key="ip", rate="10/h")
 def register(request):
     """'Create your secret profile' (design.md 12)."""
+    _t0 = time.perf_counter()
+    _cid = getattr(request, 'id', None) or 'na'
 
     if request.user.is_authenticated:
         return _landing_for(request.user)
 
     if request.method == "POST":
+        _t_form_start = time.perf_counter()
         form = RegisterForm(request.POST)
         if form.is_valid():
-            user = form.save()
-            login(request, user, backend="accounts.backends.EmailOrUsernameBackend")
-            # Send the confirmation link after login, so the token (which is
-            # bound to the account, not the session) is generated once the
-            # account is fully settled. Delivery is best-effort and never blocks
-            # onboarding (see accounts/middleware.py for hard enforcement).
-            result = send_verification_email(user, request)
-            if result:
-                messages.success(
-                    request,
-                    "Your secret profile is ready. We've emailed you a confirmation link. "
-                    "Now: which campus are you from?",
+            _t_form_end = time.perf_counter()
+            _t_user_start = time.perf_counter()
+            try:
+                with transaction.atomic():
+                    user = form.save()
+            except IntegrityError:
+                # The form check is normally enough, but two simultaneous
+                # registrations can still race. The unique username constraint
+                # (= the normalized email for normal-length addresses) wins.
+                _t_user_end = time.perf_counter()
+                form.add_error(
+                    "email",
+                    "We couldn't create a profile with that email. If it's already "
+                    "registered, sign in or reset your password.",
+                )
+                _t_total = time.perf_counter()
+                logger.info(
+                    "registration_timing cid=%s status=duplicate form_ms=%.2f user_save_ms=%.2f total_ms=%.2f",
+                    _cid,
+                    (_t_form_end - _t_form_start) * 1000,
+                    (_t_user_end - _t_user_start) * 1000,
+                    (_t_total - _t0) * 1000,
                 )
             else:
-                # Never claim an email was sent when the server refused it.
-                messages.warning(
-                    request,
-                    "Your secret profile is ready, but we could not send your confirmation "
-                    "email. You can request a new link at any time. "
-                    "Now: which campus are you from?",
+                _t_user_end = time.perf_counter()
+                _t_login_start = time.perf_counter()
+                login(request, user, backend="accounts.backends.EmailOrUsernameBackend")
+                _t_login_end = time.perf_counter()
+                # Send the confirmation link after login, so the token (which is
+                # bound to the account, not the session) is generated once the
+                # account is fully settled. Delivery is best-effort and never
+                # blocks onboarding (see accounts/middleware.py for enforcement).
+                _t_mail_start = time.perf_counter()
+                result = send_verification_email(user, request)
+                _t_mail_end = time.perf_counter()
+                status = _verification_status(user)
+                if result:
+                    if status == EmailVerification.EmailStatus.SENT:
+                        messages.success(
+                            request,
+                            "Your secret profile is ready. We sent a confirmation link "
+                            "to your college email. Now: which campus are you from?",
+                        )
+                    elif status == EmailVerification.EmailStatus.FAILED:
+                        # Queueing succeeded but delivery did not; never claim it did.
+                        messages.warning(
+                            request,
+                            "Your secret profile is ready, but we could not deliver the "
+                            "confirmation email. You can request a new link at any time. "
+                            "Now: which campus are you from?",
+                        )
+                    else:
+                        messages.success(
+                            request,
+                            "Your secret profile is ready. We're sending a confirmation "
+                            "link to your college email. Now: which campus are you from?",
+                        )
+                else:
+                    # Never claim an email was sent when it was not even queued.
+                    messages.warning(
+                        request,
+                        "Your secret profile is ready, but we could not queue your "
+                        "confirmation email. You can request a new link at any time. "
+                        "Now: which campus are you from?",
+                    )
+                _t_total = time.perf_counter()
+                logger.info(
+                    "registration_timing cid=%s status=ok form_ms=%.2f user_save_ms=%.2f login_ms=%.2f mail_ms=%.2f total_ms=%.2f",
+                    _cid,
+                    (_t_form_end - _t_form_start) * 1000,
+                    (_t_user_end - _t_user_start) * 1000,
+                    (_t_login_end - _t_login_start) * 1000,
+                    (_t_mail_end - _t_mail_start) * 1000,
+                    (_t_total - _t0) * 1000,
                 )
-            return redirect("campus:campus_select")
+                return redirect("campus:campus_select")
+        else:
+            _t_form_end = time.perf_counter()
+            _t_total = time.perf_counter()
+            logger.info(
+                "registration_timing cid=%s status=invalid form_ms=%.2f total_ms=%.2f",
+                _cid,
+                (_t_form_end - _t_form_start) * 1000,
+                (_t_total - _t0) * 1000,
+            )
     else:
         form = RegisterForm()
 
@@ -222,6 +315,7 @@ def verify_email_notice(request):
             "meta_description": "One quick step before you continue.",
             "can_index": False,
             "email_verification_pending_page": True,
+            "email_status": _verification_status(request.user),
         },
     )
 
@@ -231,15 +325,39 @@ def verify_email_notice(request):
 @ratelimit(key="user", rate="5/h")
 def resend_verification(request):
     result = send_verification_email(request.user, request)
+    status = _verification_status(request.user)
     if email_is_verified(request.user) or result.reason == "already_verified":
         messages.info(request, "Your email is already confirmed.")
+    elif result.reason == "already_queued":
+        messages.info(
+            request,
+            "A confirmation email is already on its way. Check your inbox in a moment.",
+        )
     elif result:
-        messages.success(request, "Sent. Check your inbox for the confirmation link.")
+        if status == EmailVerification.EmailStatus.SENT:
+            messages.success(
+                request,
+                "Your confirmation email was sent. Check your inbox in a moment.",
+            )
+        elif status == EmailVerification.EmailStatus.FAILED:
+            messages.warning(
+                request,
+                "We queued your confirmation email but could not deliver it. "
+                "It will be retried automatically; you can also try again shortly.",
+            )
+        else:
+            messages.success(
+                request,
+                "Your confirmation email is queued and will be sent shortly. "
+                "Check your inbox in a moment.",
+            )
     elif result.reason == "throttled":
         messages.info(request, "We just sent one. Please wait a minute before trying again.")
     else:
         messages.error(
             request,
-            "We could not send that email just now. Please try again in a moment.",
+            "We could not queue that email just now. Please try again in a moment.",
         )
-    return redirect(request.POST.get("next") or reverse("accounts:verify_email_notice"))
+    return redirect(
+        _safe_post_next(request, reverse("accounts:verify_email_notice"))
+    )

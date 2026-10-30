@@ -1,0 +1,26 @@
+<nav class="staff-tabs" aria-label="Staff review desks">
+  <a class="staff-tab{% if active_staff == 'staff_dashboard' %} is-active{% endif %}"
+     href="{% url 'campus:staff_dashboard' %}"
+     {% if active_staff == 'staff_dashboard' %}aria-current="page"{% endif %}>
+    Overview
+  </a>
+  {% if perms.campus.verify_potentialmatch or user.is_superuser %}
+    <a class="staff-tab{% if active_staff == 'pending_matches' %} is-active{% endif %}"
+       href="{% url 'campus:pending_matches' %}"
+       {% if active_staff == 'pending_matches' %}aria-current="page"{% endif %}>
+      Match review
+    </a>
+  {% endif %}
+  {% if perms.campus.review_identitycandidate or user.is_superuser %}
+    <a class="staff-tab{% if active_staff == 'identity_review' %} is-active{% endif %}"
+       href="{% url 'campus:identity_review' %}"
+       {% if active_staff == 'identity_review' %}aria-current="page"{% endif %}>
+      Identity review
+    </a>
+  {% endif %}
+  {% if user.is_superuser %}
+    <a class="staff-tab" href="{% url 'admin:index' %}">
+      Django admin
+    </a>
+  {% endif %}
+</nav>

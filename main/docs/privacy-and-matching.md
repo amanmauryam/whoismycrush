@@ -21,7 +21,8 @@ each one to where the code enforces it.
    match desk.
 5. **Identity is resolved before matching.** A crush entry becomes linked only
    when campus + normalized roll are exact, name similarity clears the
-   configured threshold, and course/year/section do not conflict. A missing or
+   configured threshold, and configured hard fields do not conflict
+   (`IDENTITY_HARD_CONFLICT_FIELDS`, default course/year/section). A missing or
    conflicting roll can produce staff-only `IdentityCandidate` evidence but
    never an automatic link. Reviewers use `campus.review_identitycandidate`;
    candidates are never shown to students and never trigger notifications.
@@ -33,8 +34,8 @@ each one to where the code enforces it.
    is `noindex` until it has enough members.
 8. **Moderation.**
    - `Block`: retires entries that resolve to (or exactly describe) the blocked
-     person, deletes pending proposals in both directions, and closes existing
-     matches.
+     person, marks pending proposals in both directions `STALE` (never deletes
+     audit history), and closes existing matches.
    - `Report`: private; reported profiles can be hidden/removed by reviewers.
 
 ## What is collected and where
@@ -68,18 +69,26 @@ each one to where the code enforces it.
 - `normalize_name` drops honorifics and punctuation but preserves middle
   initials, so "Riya Sharma" never silently equals "Riya S.".
 - Auto-resolution requires exact campus + roll, name similarity ≥ `0.88`, no
-  course/year/section conflict, and an active account. Thresholds are
+  configured hard-field conflict, and an active account. Thresholds are
   configurable with the `IDENTITY_*` settings.
 - Missing/conflicting rolls, multiple plausible people, and rejected/deferred
   candidates are never auto-bound. They wait for the identity review desk.
+  Reopening a closed candidate is explicit and audited.
 - A resolved link is invalidated if the student disappears from the candidate
-  pool or gains a hard course/year/section conflict. A simple name correction on
-  an already-verified roll keeps the link and refreshes the advisory score.
+  pool or gains a hard-field conflict. A simple name correction on an
+  already-verified roll keeps the link and refreshes the advisory score.
 - Reciprocal pairs are deduplicated on `(crush_entry, registered_student)`.
-- Approval requires both entries to still resolve to the opposite student and
-  sets `MutualMatch.notified_at` atomically before sending notifications.
+  Rows that stop being eligible become `STALE` with a reason instead of being
+  deleted.
+- Approval locks both proposal rows and both entries, requires both halves to
+  still be `PENDING` and resolved to the opposite student, re-runs eligibility,
+  and sets `MutualMatch.notified_at` atomically before queueing notifications.
+- Match emails are deduplicated per `(match, student)`. In-app notifications are
+  written even when email is disabled or fails; failures are visible in the
+  outbox and can be retried.
 - Existing campuses, profiles, and entries are normalized/backfilled by
-  migration `campus.0004`; legacy exact-roll proposals become resolved links.
+  migrations `campus.0004` and `campus.0005`; legacy scoring is labelled rather
+  than silently re-scored.
 
 ## Analytics
 

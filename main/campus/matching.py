@@ -22,7 +22,9 @@ from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
+from . import policy
 from .models import (
     Block,
     CrushEntry,
@@ -34,6 +36,10 @@ from .models import (
     normalize_text,
 )
 
+# Bump whenever a weight or eligibility rule changes. Stored scores keep the
+# version that produced them, so older rows can be identified and re-scored.
+MATCH_SCORING_VERSION = "match-v2"
+
 # --- confidence weights (sum to 100) ---------------------------------------
 W_NAME = 40.0
 W_COURSE = 20.0
@@ -44,10 +50,14 @@ W_NICKNAME = 7.0
 
 # Below this, a proposal is not even worth an admin's time. Anything that gets
 # through the identity gate and the disqualifiers lands at >= 44, so this only
-# filters genuinely degenerate rows.
+# filters genuinely degenerate rows. ``campus.policy`` can override the value.
 MIN_CONFIDENCE = 40.0
 
 _NAME_SIMILAR_ENOUGH = 0.62
+
+
+def _min_confidence() -> float:
+    return policy.min_match_confidence()
 
 
 @dataclass
@@ -128,6 +138,7 @@ def compare(entry: CrushEntry, student: StudentProfile) -> MatchVerdict:
     """Score ``entry`` against ``student``. Never raises, never mutates."""
     reasons: list[str] = []
     blockers: list[str] = []
+    hard_fields = policy.match_hard_fields()
 
     # -- identity gate -----------------------------------------------------
     if entry.college_id != student.college_id:
@@ -152,11 +163,14 @@ def compare(entry: CrushEntry, student: StudentProfile) -> MatchVerdict:
     else:
         # Legacy/unresolved path: the original exact college + roll gate is
         # retained so direct comparisons stay conservative.
-        if not entry.normalized_roll_number or (
-            entry.normalized_roll_number != student.normalized_roll_number
-        ):
+        if not entry.normalized_roll_number:
+            if policy.match_requires_unresolved_roll():
+                return MatchVerdict(False, 0.0, blockers=["roll number not supplied"])
+            reasons.append("roll not supplied; name-only review")
+        elif entry.normalized_roll_number != student.normalized_roll_number:
             return MatchVerdict(False, 0.0, blockers=["different roll number"])
-        reasons.append("campus + roll number match")
+        else:
+            reasons.append("campus + roll number match")
 
     score = 0.0
 
@@ -181,15 +195,19 @@ def compare(entry: CrushEntry, student: StudentProfile) -> MatchVerdict:
     if entry.course == student.course:
         score += W_COURSE
         reasons.append("course matches")
-    else:
+    elif "course" in hard_fields:
         blockers.append(f"course says {entry.get_course_display()}")
+    else:
+        reasons.append("course differs (soft conflict)")
 
     # -- year --------------------------------------------------------------
     if entry.year == student.year:
         score += W_YEAR
         reasons.append("year matches")
-    else:
+    elif "year" in hard_fields:
         blockers.append(f"year says {entry.get_year_display()}")
+    else:
+        reasons.append("year differs (soft conflict)")
 
     # -- section (blank on either side is not a contradiction) -------------
     entry_section = normalize_text(entry.section)
@@ -198,8 +216,10 @@ def compare(entry: CrushEntry, student: StudentProfile) -> MatchVerdict:
         if entry_section == student_section:
             score += W_SECTION
             reasons.append("section matches")
-        else:
+        elif "section" in hard_fields:
             blockers.append(f"section says {entry.section}")
+        else:
+            reasons.append("section differs (soft conflict)")
 
     # -- department -------------------------------------------------------
     entry_dept = normalize_text(entry.department)
@@ -215,7 +235,7 @@ def compare(entry: CrushEntry, student: StudentProfile) -> MatchVerdict:
 
     # A hard contradiction on course, year or section disqualifies the pair
     # outright: that is two people who happen to share a roll number
-    # (requirement 18).
+    # (requirement 18). Operators can move a field to soft policy deliberately.
     eligible = not blockers
     return MatchVerdict(eligible, round(score, 2), reasons, blockers)
 
@@ -233,24 +253,47 @@ def _refresh_resolved_proposal(match: PotentialMatch) -> None:
     verdict = compare(match.crush_entry, match.registered_student)
     match.confidence_score = verdict.confidence
     match.match_reasons = _reason_text(verdict)
-    match.save(update_fields=["confidence_score", "match_reasons"])
+    match.scoring_version = MATCH_SCORING_VERSION
+    match.scored_at = timezone.now()
+    match.save(
+        update_fields=[
+            "confidence_score",
+            "match_reasons",
+            "scoring_version",
+            "scored_at",
+        ]
+    )
+
+
+def _stale_pending_for_entry(entry: CrushEntry, reason: str) -> int:
+    """Retire live proposals without destroying their audit history."""
+
+    return PotentialMatch.objects.filter(
+        crush_entry=entry, status=PotentialMatch.Status.PENDING
+    ).update(
+        status=PotentialMatch.Status.STALE,
+        invalidated_reason=reason[:300],
+        scored_at=timezone.now(),
+    )
 
 
 def _sync_pending_proposal(
     entry: CrushEntry, student: StudentProfile, verdict: MatchVerdict
 ) -> PotentialMatch | None:
-    """Create or refresh one proposal, or drop it if it no longer fits.
+    """Create, refresh, retire or revive one proposal.
 
-    Pending rows that stop qualifying are deleted. Reviewed rows keep their
-    status -- an approval or rejection is never silently undone -- but their
-    advisory score still reflects the latest edited details.
+    A proposal that stops qualifying becomes ``STALE`` instead of being
+    deleted. If the entry is edited back into eligibility, the *same* row is
+    revived so reviewers keep one continuous history. Human decisions
+    (approved/rejected) are never silently undone.
     """
     # A reviewer-confirmed identity is sufficient even when the typed details
     # are sparse; the score is advisory. Unresolved entries still need the
     # normal confidence floor before a proposal is worth an admin's time.
     qualified = verdict.eligible and (
-        bool(entry.resolved_student_id) or verdict.confidence >= MIN_CONFIDENCE
+        bool(entry.resolved_student_id) or verdict.confidence >= _min_confidence()
     )
+    now = timezone.now()
     match = PotentialMatch.objects.filter(
         crush_entry=entry, registered_student=student
     ).first()
@@ -266,6 +309,8 @@ def _sync_pending_proposal(
                     confidence_score=verdict.confidence,
                     match_reasons=_reason_text(verdict),
                     status=PotentialMatch.Status.PENDING,
+                    scoring_version=MATCH_SCORING_VERSION,
+                    scored_at=now,
                 )
         except IntegrityError:
             # A concurrent matcher created the same unique proposal.
@@ -273,13 +318,63 @@ def _sync_pending_proposal(
                 crush_entry=entry, registered_student=student
             )
 
-    if match.status == PotentialMatch.Status.PENDING and not qualified:
-        match.delete()
+    if match.status in {
+        PotentialMatch.Status.APPROVED,
+        PotentialMatch.Status.REJECTED,
+    }:
+        # Human decisions stay put; only the advisory evidence is refreshed.
+        match.confidence_score = verdict.confidence
+        match.match_reasons = _reason_text(verdict)
+        match.scoring_version = MATCH_SCORING_VERSION
+        match.scored_at = now
+        match.save(
+            update_fields=[
+                "confidence_score",
+                "match_reasons",
+                "scoring_version",
+                "scored_at",
+            ]
+        )
         return None
 
+    if not qualified:
+        if match.status == PotentialMatch.Status.PENDING:
+            match.status = PotentialMatch.Status.STALE
+            match.invalidated_reason = (
+                "; ".join(verdict.blockers) or "No longer clears the confidence floor."
+            )[:300]
+            match.confidence_score = verdict.confidence
+            match.match_reasons = _reason_text(verdict)
+            match.scoring_version = MATCH_SCORING_VERSION
+            match.scored_at = now
+            match.save(
+                update_fields=[
+                    "status",
+                    "invalidated_reason",
+                    "confidence_score",
+                    "match_reasons",
+                    "scoring_version",
+                    "scored_at",
+                ]
+            )
+        return None
+
+    match.status = PotentialMatch.Status.PENDING
+    match.invalidated_reason = ""
     match.confidence_score = verdict.confidence
     match.match_reasons = _reason_text(verdict)
-    match.save(update_fields=["confidence_score", "match_reasons"])
+    match.scoring_version = MATCH_SCORING_VERSION
+    match.scored_at = now
+    match.save(
+        update_fields=[
+            "status",
+            "invalidated_reason",
+            "confidence_score",
+            "match_reasons",
+            "scoring_version",
+            "scored_at",
+        ]
+    )
     return None
 
 
@@ -292,6 +387,8 @@ def _proposal_candidates(entry: CrushEntry) -> list[StudentProfile]:
     """
 
     author = entry.submitted_by
+    if author.college_id != entry.college_id:
+        return []
     base = StudentProfile.objects.filter(
         college_id=entry.college_id, user__is_active=True
     ).exclude(pk=author.pk).exclude(pk__in=_blocked_ids(author))
@@ -311,11 +408,18 @@ def propose_for_entry(
     """Find registered students matching ``entry`` and queue them for review.
 
     Resolves identity first (unless the caller just did so), refreshes existing
-    pending rows in place, and removes rows that no longer fit because the entry
-    was edited or blocked. Returns only rows newly created.
+    live rows in place, and retires rows that no longer fit because the entry
+    was edited, removed or blocked. Returns only rows newly created.
     """
 
     if not entry.is_active:
+        _stale_pending_for_entry(entry, "Crush entry is no longer active.")
+        return []
+
+    if entry.college_id != entry.submitted_by.college_id:
+        _stale_pending_for_entry(
+            entry, "Entry is outside the submitting student's campus."
+        )
         return []
 
     if resolve:
@@ -324,11 +428,17 @@ def propose_for_entry(
         resolve_entry(entry)
         entry.refresh_from_db()
 
-    if not entry.resolved_student_id and not entry.normalized_roll_number:
-        return []
-
     candidates = _proposal_candidates(entry)
     candidate_ids = [student.pk for student in candidates]
+
+    if not candidates:
+        reason = (
+            "No verified identity or roll number for a safe proposal."
+            if not entry.resolved_student_id and not entry.normalized_roll_number
+            else "No eligible reciprocal candidate remains."
+        )
+        _stale_pending_for_entry(entry, reason)
+        return []
 
     created: list[PotentialMatch] = []
     for student in candidates:
@@ -338,8 +448,13 @@ def propose_for_entry(
 
     # An edited entry may now point somewhere else entirely.
     PotentialMatch.objects.filter(
-        crush_entry=entry, status=PotentialMatch.Status.PENDING
-    ).exclude(registered_student_id__in=candidate_ids).delete()
+        crush_entry=entry,
+        status=PotentialMatch.Status.PENDING,
+    ).exclude(registered_student_id__in=candidate_ids).update(
+        status=PotentialMatch.Status.STALE,
+        invalidated_reason="Entry was repointed to a different registered student.",
+        scored_at=timezone.now(),
+    )
     stale_reviewed = PotentialMatch.objects.filter(crush_entry=entry).exclude(
         registered_student_id__in=candidate_ids
     )
@@ -392,6 +507,17 @@ def _blocked_ids(student: StudentProfile) -> list[int]:
 # ---------------------------------------------------------------------------
 
 
+def _pending_index() -> tuple[list[PotentialMatch], dict[tuple[int, int], PotentialMatch]]:
+    """Load pending proposals once, indexed by (author, registered student)."""
+
+    rows = list(PotentialMatch.objects.for_review().pending().order_by("pk"))
+    index = {
+        (row.crush_entry.submitted_by_id, row.registered_student_id): row
+        for row in rows
+    }
+    return rows, index
+
+
 def pending_pairs() -> list[dict]:
     """Reciprocal proposals grouped into one row per pair, best first.
 
@@ -400,9 +526,12 @@ def pending_pairs() -> list[dict]:
     admin can meaningfully approve (requirement 18).
     """
     rows: dict[tuple[int, int], dict] = {}
-    for match in PotentialMatch.objects.for_review().pending().order_by("pk"):
-        partner = match.reciprocal
-        if partner is None:
+    all_rows, index = _pending_index()
+    for match in all_rows:
+        partner = index.get(
+            (match.registered_student_id, match.crush_entry.submitted_by_id)
+        )
+        if partner is None or partner.pk == match.pk:
             continue
         key = match.pair_key
         if key in rows:
@@ -423,8 +552,10 @@ def pending_pairs() -> list[dict]:
 
 def unpaired_pending() -> list[PotentialMatch]:
     """Pending proposals with no reciprocal half, for completeness."""
+    rows, index = _pending_index()
     return [
-        m
-        for m in PotentialMatch.objects.for_review().pending().order_by("pk")
-        if m.reciprocal is None
+        row
+        for row in rows
+        if index.get((row.registered_student_id, row.crush_entry.submitted_by_id))
+        is None
     ]

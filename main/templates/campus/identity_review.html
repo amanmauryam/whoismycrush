@@ -3,12 +3,13 @@
 {% block content %}
 <div class="container">
   <div class="breadcrumb">
-    <a href="{% url 'campus:pending_matches' %}">Pending crush matches</a>
+    <a href="{% url 'campus:staff_dashboard' %}">Staff desk</a>
     <span>→</span>
     <span>Identity review</span>
   </div>
 
   <div class="page-head">
+    <p class="tiny-label">Private identity desk</p>
     <h1>Identity review</h1>
     <p>
       These entries do not yet have a safely verified crush identity. Candidate
@@ -16,66 +17,193 @@
     </p>
   </div>
 
+  {% include "campus/staff_nav.html" %}
+
   <div class="notice-box">
+    {% include "components/icon.html" with name="shield" size=15 %}
     Confirm only when the typed name, roll number and campus all point to the
     same person. A missing or conflicting roll is a reason to review, not a
     reason to guess.
   </div>
 
-  {% if entries %}
-    <div class="paper" style="margin-top:20px">
-      <table class="review-table">
-        <thead>
-          <tr>
-            <th scope="col">Entry</th>
-            <th scope="col">Campus</th>
-            <th scope="col">Status</th>
-            <th scope="col">Candidates</th>
-            <th scope="col"><span class="sr-only">Review</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for entry in entries %}
-            <tr>
-              <td>
-                <strong>{{ entry.full_name }}</strong>
-                <span class="muted">typed by {{ entry.submitted_by.full_name }}</span>
-                <div class="muted small">
-                  Roll: {{ entry.roll_number|default:"not given" }}
-                  · {{ entry.get_course_display }} · Year {{ entry.year }}
-                </div>
-              </td>
-              <td>{{ entry.college.name }}</td>
-              <td><span class="stamp">{{ entry.get_identity_status_display }}</span></td>
-              <td>
-                {% for candidate in entry.review_candidates %}
-                  <div>
-                    {{ candidate.candidate.full_name }}
-                    <span class="muted">
-                      {% if candidate.confidence_score %}
-                        · {{ candidate.confidence_score|floatformat:0 }}%
-                      {% endif %}
-                    </span>
-                  </div>
-                {% empty %}
-                  <span class="muted">—</span>
-                {% endfor %}
-              </td>
-              <td>
-                <a class="btn btn-sm" href="{% url 'campus:identity_review_detail' entry.pk %}">
-                  Review
-                </a>
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+  <div class="status-chips" role="group" aria-label="Filter by identity status">
+    <a class="filter-chip{% if status == 'all' %} is-active{% endif %}"
+       href="{% querystring status='all' page=None %}">
+      All <span>{{ total_count }}</span>
+    </a>
+    <a class="filter-chip{% if status == 'needs_review' %} is-active{% endif %}"
+       href="{% querystring status='needs_review' page=None %}">
+      Needs review <span>{{ status_counts.needs_review }}</span>
+    </a>
+    <a class="filter-chip{% if status == 'candidate_found' %} is-active{% endif %}"
+       href="{% querystring status='candidate_found' page=None %}">
+      Candidate found <span>{{ status_counts.candidate_found }}</span>
+    </a>
+    <a class="filter-chip{% if status == 'pending' %} is-active{% endif %}"
+       href="{% querystring status='pending' page=None %}">
+      Pending <span>{{ status_counts.pending }}</span>
+    </a>
+    <a class="filter-chip{% if status == 'unresolvable' %} is-active{% endif %}"
+       href="{% querystring status='unresolvable' page=None %}">
+      Unresolvable <span>{{ status_counts.unresolvable }}</span>
+    </a>
+  </div>
+
+  <form class="review-toolbar" method="get" role="search">
+    <input type="hidden" name="status" value="{{ status }}">
+    <div class="review-toolbar-search">
+      <label class="sr-only" for="identity-search">Search identities</label>
+      <span class="review-toolbar-icon" aria-hidden="true">
+        {% include "components/icon.html" with name="search" size=18 %}
+      </span>
+      <input class="input" id="identity-search" type="search" name="q"
+             value="{{ query }}" placeholder="Name, roll, campus or submitter">
     </div>
+    <div class="review-toolbar-field">
+      <label for="identity-college">Campus</label>
+      <select id="identity-college" name="college">
+        <option value="">All campuses</option>
+        {% for college in colleges %}
+          <option value="{{ college.pk }}"{% if selected_college == college.pk|stringformat:"s" %} selected{% endif %}>
+            {{ college.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="review-toolbar-field">
+      <label for="identity-sort">Sort</label>
+      <select id="identity-sort" name="sort">
+        <option value="attention"{% if sort == 'attention' %} selected{% endif %}>Needs attention</option>
+        <option value="newest"{% if sort == 'newest' %} selected{% endif %}>Newest first</option>
+        <option value="oldest"{% if sort == 'oldest' %} selected{% endif %}>Oldest first</option>
+        <option value="name"{% if sort == 'name' %} selected{% endif %}>Typed name</option>
+        <option value="campus"{% if sort == 'campus' %} selected{% endif %}>Campus</option>
+      </select>
+    </div>
+    <div class="review-toolbar-actions">
+      <button class="btn btn-sm btn-primary" type="submit">Apply</button>
+      {% if query or selected_college or status != 'all' %}
+        <a class="btn btn-sm" href="{% url 'campus:identity_review' %}">Clear</a>
+      {% endif %}
+    </div>
+  </form>
+
+  {% if entries %}
+    <form method="post" action="{% url 'campus:identity_bulk_action' %}"
+          data-bulk-form data-busy-form>
+      {% csrf_token %}
+      <div class="bulk-bar">
+        <div class="bulk-bar-copy">
+          <strong>Safe bulk action</strong>
+          <span class="muted small">Re-run resolution only. It never confirms an identity.</span>
+        </div>
+        <button class="btn btn-sm" type="submit" name="action" value="rerun"
+                data-confirm="Re-run safe identity resolution for the selected entries? No identity will be confirmed.">
+          Re-run selected
+        </button>
+      </div>
+
+      <div class="paper table-panel">
+        <div class="table-scroll">
+          <table class="review-table">
+            <thead>
+              <tr>
+                <th scope="col" class="select-cell">
+                  <input type="checkbox" data-check-all="identity-entry"
+                         aria-label="Select all entries on this page">
+                </th>
+                <th scope="col">Entry</th>
+                <th scope="col">Campus</th>
+                <th scope="col">Status</th>
+                <th scope="col">Open candidates</th>
+                <th scope="col"><span class="sr-only">Review</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in entries %}
+                <tr>
+                  <td class="select-cell" data-label="Select">
+                    <input type="checkbox" name="entry_ids" value="{{ entry.pk }}"
+                           id="entry-{{ entry.pk }}" data-check-item="identity-entry">
+                    <label class="sr-only" for="entry-{{ entry.pk }}">
+                      Select entry {{ entry.full_name }}
+                    </label>
+                  </td>
+                  <td data-label="Entry">
+                    <strong>{{ entry.full_name }}</strong>
+                    <div class="muted small">typed by {{ entry.submitted_by.full_name }}</div>
+                    <div class="cell-meta">
+                      Roll: {{ entry.roll_number|default:"not given" }}
+                      · {{ entry.get_course_display }} · Year {{ entry.year }}
+                    </div>
+                  </td>
+                  <td data-label="Campus">{{ entry.college.name }}</td>
+                  <td data-label="Status">
+                    <span class="stamp">{{ entry.get_identity_status_display }}</span>
+                  </td>
+                  <td data-label="Open candidates">
+                    {% for candidate in entry.review_candidates %}
+                      <span class="mini-candidate">
+                        {{ candidate.candidate.full_name }}
+                        <span>
+                          {% if candidate.confidence_score %}
+                            {{ candidate.confidence_score|floatformat:0 }}%
+                          {% else %}
+                            —
+                          {% endif %}
+                        </span>
+                      </span>
+                    {% empty %}
+                      <span class="muted">No safe candidate</span>
+                    {% endfor %}
+                  </td>
+                  <td data-label="Review" class="row-action">
+                    <a class="btn btn-sm" href="{% url 'campus:identity_review_detail' entry.pk %}">
+                      Review
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </form>
+
+    {% if page_obj.has_other_pages %}
+      <nav class="pagination" aria-label="Identity review pages">
+        {% if page_obj.has_previous %}
+          <a class="btn btn-sm" href="{% querystring page=page_obj.previous_page_number %}">Previous</a>
+        {% endif %}
+        <span class="muted small">
+          Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+          ({{ entry_count }} matching)
+        </span>
+        {% if page_obj.has_next %}
+          <a class="btn btn-sm" href="{% querystring page=page_obj.next_page_number %}">Next</a>
+        {% endif %}
+      </nav>
+    {% endif %}
   {% else %}
     <div class="empty-state">
       <span class="doodle" aria-hidden="true">✓</span>
-      <h2>All clear</h2>
-      <p class="muted">No unresolved crush identities need review right now.</p>
+      <h2>
+        {% if query or selected_college or status != 'all' %}
+          Nothing matches these filters
+        {% else %}
+          All clear
+        {% endif %}
+      </h2>
+      <p class="muted">
+        {% if query or selected_college or status != 'all' %}
+          Try a different status, campus or search term.
+        {% else %}
+          No unresolved crush identities need review right now.
+        {% endif %}
+      </p>
+      {% if query or selected_college or status != 'all' %}
+        <a class="btn btn-sm" href="{% url 'campus:identity_review' %}">Clear filters</a>
+      {% endif %}
     </div>
   {% endif %}
 </div>

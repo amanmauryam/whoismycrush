@@ -41,7 +41,35 @@ IDENTITY_MAX_CANDIDATES=10
 IDENTITY_FUZZY_SCAN_LIMIT=500
 IDENTITY_REGISTRATION_SCAN_LIMIT=500
 IDENTITY_REQUIRE_STUDENT_VERIFICATION_FOR_AUTO=False
+# Matching policy (comma-separated field names; blank means no hard conflict)
+MATCH_HARD_CONFLICT_FIELDS=course,year,section
+MATCH_MIN_CONFIDENCE=40
+MATCH_REQUIRE_ROLL_FOR_UNRESOLVED=True
+IDENTITY_HARD_CONFLICT_FIELDS=course,year,section
+# Notification outbox
+NOTIFICATION_EMAIL_MAX_ATTEMPTS=5
+# Verification-email outbox (registration returns before SMTP)
+VERIFICATION_EMAIL_MAX_ATTEMPTS=5
+VERIFICATION_EMAIL_TIMEOUT=45
+VERIFICATION_EMAIL_STALE_SENDING_SECONDS=300
+VERIFICATION_EMAIL_RETRY_AFTER_SECONDS=60
 ```
+
+### Verification-email recovery timer
+
+The registration/resend response only writes a durable `pending` row. A
+best-effort daemon thread usually sends it immediately, but a process restart
+can terminate that thread. Run the recovery command every minute so no email
+stays pending and stale `sending` rows are reclaimed:
+
+```cron
+* * * * * cd /srv/whoismycrush && python manage.py process_verification_emails
+```
+
+The command logs outcomes without recipient addresses or verification links.
+Failed rows are retried up to `VERIFICATION_EMAIL_MAX_ATTEMPTS`; a crash
+between SMTP acceptance and the final database update can produce one
+at-least-once duplicate, but the outbox row is never silently dropped.
 
 `DEBUG=False` turns on HSTS, secure cookies and an SSL redirect that expects a
 trusted proxy (`SECURE_PROXY_SSL_HEADER`). Terminate TLS at the proxy and make
@@ -94,6 +122,28 @@ Before deploying:
 Rollback of the migration is schema-only (`RunPython` reverse is a no-op), so
 restore the pre-migration backup rather than reversing in production.
 
+### Matching-audit migration (`campus.0005`)
+
+Migration `0005_crushentry_original_payload_and_more` adds `STALE` proposals,
+scoring versions/timestamps, first-submission snapshots (`original_payload`),
+candidate status transitions in the identity audit, and the notification email
+outbox. Its `RunPython` backfill:
+
+- snapshots current values for existing entries (there is no older evidence to
+  recover) and labels already-resolved entries `legacy`;
+- marks existing notifications `email_status="skipped"` because email was
+  handled synchronously before the outbox existed.
+
+After deploy:
+
+1. Run `python manage.py audit_matching` and review legacy counts.
+2. Run `python manage.py reevaluate_matching --dry-run`, then without
+   `--dry-run` during a quiet window if policy intentionally changed.
+3. Monitor `python manage.py audit_matching` for failed emails, then retry with
+   `python manage.py retry_notifications`.
+4. Keep `MATCH_EMAILS_ENABLED=False` until SMTP is verified; in-app alerts are
+   still written.
+
 ## Static + media
 
 - `STATICFILES_DIRS = static/`, `STATIC_ROOT = staticfiles/` served by
@@ -124,6 +174,8 @@ restore the pre-migration backup rather than reversing in production.
       all set.
 - [ ] `python manage.py check_email --to <you>` passes — it proves the server
       accepts the credentials and that a message really leaves the box.
+- [ ] `process_verification_emails` is scheduled every minute; after a test
+      signup, the `EmailVerification` row reaches `sent` (or a logged `failed`).
 - [ ] Redis reachable, `CACHES` pointed at it, `RATELIMIT_ENABLE=True`.
 - [ ] `seed_posts` run so the blog isn't an empty directory index.
 - [ ] Backups for Postgres and `MEDIA_ROOT`; restore drill completed.

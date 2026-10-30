@@ -22,11 +22,30 @@
       </ul>
     {% endif %}
 
-    <form method="post" novalidate>
+    <form method="post">
       {% csrf_token %}
       {% for field in form %}
-        {% include "components/form_field.html" with field=field %}
+        {% if field.name != "confirm_email_typo" %}
+          {% include "components/form_field.html" with field=field %}
+        {% endif %}
       {% endfor %}
+
+      {% if form.email_suggestion %}
+        <div class="field email-suggestion">
+          <p class="help">
+            Did you mean <strong>{{ form.email_suggestion }}</strong>?
+          </p>
+          <button class="btn btn-sm" type="submit" name="use_suggested_email" value="1">
+            Use {{ form.email_suggestion }}
+          </button>
+          <div class="check-field" style="margin-top:10px">
+            {{ form.confirm_email_typo }}
+            <label for="{{ form.confirm_email_typo.id_for_label }}">
+              {{ form.confirm_email_typo.label }}
+            </label>
+          </div>
+        </div>
+      {% endif %}
 
       <div class="form-actions">
         <button class="btn btn-primary" type="submit">Continue to my campus</button>

@@ -3,17 +3,41 @@
 {% block content %}
 <div class="container">
   <div class="breadcrumb">
-    <a href="{% url 'campus:pending_matches' %}">Pending matches</a> <span>→</span>
+    <a href="{% url 'campus:staff_dashboard' %}">Staff desk</a>
+    <span>→</span>
+    <a href="{% url 'campus:pending_matches' %}">Match review</a>
+    <span>→</span>
     <span>Review #{{ proposal.pk }}</span>
   </div>
 
   <div class="page-head">
-    <h1>Is this one real?</h1>
+    <p class="tiny-label">Private match desk</p>
+    <div class="head-with-stamp">
+      <h1>Is this one real?</h1>
+      <span class="stamp">{{ proposal.get_status_display }}</span>
+    </div>
     <p>
-      Compare what each student typed against the other's registered campus ID.
-      Only approve when the identities line up.
+      Compare what each person typed against the other's registered campus ID.
+      Approve only when both directions are confirmed, unblocked and still pass
+      policy.
     </p>
   </div>
+
+  {% include "campus/staff_nav.html" %}
+
+  {% if blocked %}
+    <div class="notice-box is-danger">
+      {% include "components/icon.html" with name="shield" size=15 %}
+      A block exists between these students. Approval is disabled; rejection is
+      still safe and notifies nobody.
+    </div>
+  {% elif proposal.status != 'pending' %}
+    <div class="notice-box">
+      {% include "components/icon.html" with name="shield" size=15 %}
+      This proposal is no longer pending. It stays visible for history and
+      cannot be approved from this page.
+    </div>
+  {% endif %}
 
   <div class="compare-grid">
     <article class="paper compare-card">
@@ -28,16 +52,18 @@
         {% if proposal.author.department %}<div><dt>Dept.</dt><dd>{{ proposal.author.department }}</dd></div>{% endif %}
       </dl>
       <h3 class="tiny-label">Person A entered this person</h3>
-      <p>
-        <strong>{{ proposal.crush_entry.full_name }}</strong><br>
-        {{ proposal.crush_entry.course_line }}<br>
-        <span class="muted">Roll ··· {{ proposal.crush_entry.masked_roll_number }}</span>
-        {% if proposal.crush_entry.nickname %}<br><span class="muted">Nickname: {{ proposal.crush_entry.nickname }}</span>{% endif %}
-      </p>
+      <div class="typed-crush">
+        <strong>{{ proposal.crush_entry.full_name }}</strong>
+        <span>{{ proposal.crush_entry.course_line }}</span>
+        <span class="muted">Roll {{ proposal.crush_entry.masked_roll_number }}</span>
+        {% if proposal.crush_entry.nickname %}
+          <span class="muted">Nickname: {{ proposal.crush_entry.nickname }}</span>
+        {% endif %}
+      </div>
       <p class="small muted">Internal priority: #{{ proposal.crush_entry.priority }} (never shown to students)</p>
     </article>
 
-    <article class="paper compare-card">
+    <article class="paper compare-card{% if blocked %} is-blocked{% endif %}">
       <span class="stamp stamp-ink">PERSON B</span>
       <h2>{{ proposal.registered_student.full_name }}</h2>
       <p class="muted">{{ proposal.registered_student.college.name }}</p>
@@ -50,53 +76,211 @@
       </dl>
       {% if partner %}
         <h3 class="tiny-label">Person B entered this person</h3>
-        <p>
-          <strong>{{ partner.crush_entry.full_name }}</strong><br>
-          {{ partner.crush_entry.course_line }}<br>
-          <span class="muted">Roll ··· {{ partner.crush_entry.masked_roll_number }}</span>
-          {% if partner.crush_entry.nickname %}<br><span class="muted">Nickname: {{ partner.crush_entry.nickname }}</span>{% endif %}
-        </p>
+        <div class="typed-crush">
+          <strong>{{ partner.crush_entry.full_name }}</strong>
+          <span>{{ partner.crush_entry.course_line }}</span>
+          <span class="muted">Roll {{ partner.crush_entry.masked_roll_number }}</span>
+          {% if partner.crush_entry.nickname %}
+            <span class="muted">Nickname: {{ partner.crush_entry.nickname }}</span>
+          {% endif %}
+        </div>
         <p class="small muted">Internal priority: #{{ partner.crush_entry.priority }} (never shown to students)</p>
       {% else %}
-        <p class="muted">No reciprocal entry — this proposal cannot be approved.</p>
+        <div class="notice-box is-warning">
+          No reciprocal entry yet. This proposal cannot become a match.
+        </div>
       {% endif %}
     </article>
   </div>
 
-  <div class="paper">
-    <h2>Matcher notes</h2>
-    <p>
-      <strong>Confidence:</strong>
-      {% if proposal.confidence_score %}{{ proposal.confidence_percent }}{% else %}—{% endif %}
-    </p>
-    <p class="muted">{{ proposal.match_reasons|default:"No reasons recorded." }}</p>
-  </div>
+  <section class="paper evidence-panel" aria-labelledby="verdict-heading">
+    <div class="evidence-head">
+      <div>
+        <span class="tiny-label">Explainable scoring</span>
+        <h2 id="verdict-heading">Current verdict</h2>
+      </div>
+      {% if can_approve %}
+        <span class="stamp stamp-green">READY FOR APPROVAL</span>
+      {% elif proposal.status == 'pending' %}
+        <span class="stamp">NOT APPROVABLE</span>
+      {% else %}
+        <span class="stamp stamp-ink">{{ proposal.get_status_display }}</span>
+      {% endif %}
+    </div>
 
-  {% if partner %}
-    <div class="paper" style="margin-top:20px">
-      <h2>Decision</h2>
+    <div class="review-facts">
+      <div>
+        <span class="tiny-label">Stored score</span>
+        <strong>{% if proposal.confidence_score %}{{ proposal.confidence_percent }}{% else %}—{% endif %}</strong>
+      </div>
+      <div>
+        <span class="tiny-label">Current score</span>
+        <strong>{{ verdict.confidence|floatformat:0 }}%</strong>
+      </div>
+      <div>
+        <span class="tiny-label">Scoring version</span>
+        <strong>{{ proposal.scoring_version|default:"legacy" }}</strong>
+      </div>
+      <div>
+        <span class="tiny-label">Last scored</span>
+        <strong>{{ proposal.scored_at|date:"d M Y, H:i"|default:"—" }}</strong>
+      </div>
+      <div>
+        <span class="tiny-label">Reciprocal verdict</span>
+        <strong>
+          {% if partner_verdict %}
+            {% if partner_verdict.eligible %}Eligible{% else %}Blocked/conflict{% endif %}
+          {% else %}
+            No reciprocal
+          {% endif %}
+        </strong>
+      </div>
+    </div>
+
+    <div class="evidence-columns">
+      <div>
+        <h3 class="tiny-label">Stored matcher reasons</h3>
+        <p>{{ proposal.match_reasons|default:"No reasons recorded." }}</p>
+        <h3 class="tiny-label">Current reasons</h3>
+        {% if verdict.reasons %}
+          <ul class="evidence-list">
+            {% for reason in verdict.reasons %}<li>{{ reason }}</li>{% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted small">No positive signals.</p>
+        {% endif %}
+      </div>
+      <div>
+        <h3 class="tiny-label">Current blockers</h3>
+        {% if verdict.blockers %}
+          <ul class="evidence-list is-conflict">
+            {% for blocker in verdict.blockers %}<li>{{ blocker }}</li>{% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted small">Person A's direction passes policy.</p>
+        {% endif %}
+        {% if partner_verdict and partner_verdict.blockers %}
+          <h3 class="tiny-label">Reciprocal blockers</h3>
+          <ul class="evidence-list is-conflict">
+            {% for blocker in partner_verdict.blockers %}<li>{{ blocker }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+        {% if proposal.invalidated_reason %}
+          <h3 class="tiny-label">Invalidation reason</h3>
+          <p class="small">{{ proposal.invalidated_reason }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if approval_blockers and proposal.status == 'pending' %}
+      <div class="approval-blockers">
+        <h3 class="tiny-label">Why approval is unavailable</h3>
+        <ul class="evidence-list is-conflict">
+          {% for blocker in approval_blockers %}<li>{{ blocker }}</li>{% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+  </section>
+
+  {% if proposal.status == 'pending' and partner %}
+    <section class="paper decision-panel" aria-labelledby="decision-heading">
+      <div class="evidence-head">
+        <div>
+          <span class="tiny-label">Irreversible decision</span>
+          <h2 id="decision-heading">Record a decision</h2>
+        </div>
+      </div>
       <p class="muted">
-        Approving creates a mutual crush and notifies both students. Rejecting
-        closes the pair and notifies nobody.
+        Approval creates the mutual match and notifies both students. Rejection
+        closes the pair without notifying anyone. A short reason is required.
       </p>
-      <form method="post" action="{% url 'campus:approve_match' proposal.pk %}">
+      <form method="post" data-busy-form
+            action="{% url 'campus:approve_match' proposal.pk %}">
         {% csrf_token %}
         {% include "components/form_field.html" with field=notes_form.admin_notes %}
         <div class="form-actions">
-          <button class="btn btn-primary" type="submit">Approve match</button>
-        </div>
-      </form>
-      <form method="post" action="{% url 'campus:reject_match' proposal.pk %}">
-        {% csrf_token %}
-        <input type="hidden" name="admin_notes" value="Rejected from review desk.">
-        <div class="form-actions">
+          {% if can_approve %}
+            <button class="btn btn-primary" type="submit"
+                    data-confirm="Approve this match? Both students will be notified immediately.">
+              Approve match
+            </button>
+          {% else %}
+            <button class="btn btn-primary" type="button" disabled>
+              Approve match
+            </button>
+          {% endif %}
           <button class="btn btn-danger" type="submit"
+                  formaction="{% url 'campus:reject_match' proposal.pk %}"
                   data-confirm="Reject this pair? Neither student is contacted.">
             Reject match
           </button>
         </div>
       </form>
-    </div>
+    </section>
+  {% elif proposal.status == 'pending' %}
+    <section class="paper decision-panel">
+      <h2>No decision available yet</h2>
+      <p class="muted">
+        This is a one-sided proposal. It cannot be approved or rejected as a
+        pair until the other person also enters a matching crush.
+      </p>
+    </section>
+  {% elif proposal.status == 'approved' %}
+    <section class="paper decision-panel">
+      <h2>Approved</h2>
+      <p class="muted">
+        This pair became a mutual match on
+        {{ proposal.verified_at|date:"d M Y, H:i"|default:"an earlier date" }}
+        by {{ proposal.verified_by|default:"system" }}.
+      </p>
+      {% if proposal.mutual_match %}
+        <p>Mutual match #{{ proposal.mutual_match.pk }} is on record.</p>
+      {% endif %}
+    </section>
   {% endif %}
+
+  <section class="section" aria-labelledby="history-heading">
+    <div class="section-head">
+      <div>
+        <span class="section-label">Accountability</span>
+        <h2 id="history-heading">Decision history</h2>
+      </div>
+    </div>
+
+    {% if history %}
+      <ol class="audit-list">
+        {% for row in history %}
+          <li>
+            <span class="stamp{% if row.status == 'approved' %} stamp-green{% endif %}">
+              {{ row.get_status_display }}
+            </span>
+            <div class="audit-copy">
+              <strong>
+                {{ row.crush_entry.submitted_by.full_name }} →
+                {{ row.registered_student.full_name }}
+              </strong>
+              <span class="muted small">
+                Score {% if row.confidence_score %}{{ row.confidence_percent }}{% else %}—{% endif %}
+                · {{ row.scoring_version|default:"legacy" }}
+                · created {{ row.created_at|date:"d M Y, H:i" }}
+              </span>
+              {% if row.verified_at %}
+                <span class="muted small">
+                  Decided {{ row.verified_at|date:"d M Y, H:i" }}
+                  by {{ row.verified_by|default:"system" }}
+                </span>
+              {% endif %}
+              {% if row.admin_notes %}<span class="audit-note">{{ row.admin_notes }}</span>{% endif %}
+              {% if row.invalidated_reason %}
+                <span class="audit-note">{{ row.invalidated_reason }}</span>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="muted">No history recorded.</p>
+    {% endif %}
+  </section>
 </div>
 {% endblock %}

@@ -677,9 +677,25 @@ ul.errorlist,
   animation: rise var(--normal) var(--ease) both;
 }
 
+.toast-success {
+  background: var(--green);
+}
+
+.toast-info {
+  background: var(--blue);
+}
+
+.toast-warning {
+  background: var(--yellow);
+}
+
 .toast-error {
   background: var(--red);
   color: var(--white);
+}
+
+[data-busy-form][aria-busy="true"] .btn {
+  cursor: progress;
 }
 
 @keyframes rise {

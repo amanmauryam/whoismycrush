@@ -153,6 +153,13 @@ Live site par har din, weekend bhi, yeh order follow karein. Queue ka matlab hai
 "jin cheezon ka aapko intezaar hai". Queue purani na chhodein, warna students ko
 match late milega.
 
+**Staff desk (roz ka main page):**
+<https://whoismycrush.com/staff/>
+
+Yeh private review desk hai. Yahan dono queue ke counts, blocked conflicts,
+stale proposals aur next items ek jagah dikhte hain. Sirf staff login with review
+permission hi ise khol sakta hai. Students ko yeh page kabhi na dikhe.
+
 ### 4.1 Pehle unclear identities solve karein
 
 **Kab:** roz, aur match proposals approve karne se pehle.
@@ -161,30 +168,26 @@ match late milega.
 approve nahi ho sakta.
 
 **Real page:**
-<https://whoismycrush.com/802134admin/campus/identitycandidate/>
+<https://whoismycrush.com/staff/identities/>
 
-1. Page kholein.
-2. Right side ke **Filter** se **Status** = **Candidate** ya **Needs review**
-   chunein.
-3. Ek row kholein. Usme likha hoga:
-   - student ne kya naam type kiya,
-   - system ko kaun sa registered student milta jaisa lag raha hai,
-   - naam kitna milta hai,
-   - course, year aur section kitna match karta hai.
-4. Details ko dhyan se compare karein. Sirf naam dekhkar confirm na karein.
-5. Agar ek hi student saaf taur par sahi hai, to row ke left wala checkbox
-   tick karein. Phir upar **Action** dropdown se
-   **Confirm selected identity candidates** chunein aur **Go** dabayein.
-6. Agar candidate galat hai, to **Reject selected identity candidates** chunein.
-7. Agar external proof chahiye, to **Defer selected identity candidates** chunein.
-8. Agar kisi bhi student ko safe tarike se identify nahi kar sakte, to
-   **Crush entries** page kholein:
-   <https://whoismycrush.com/802134admin/campus/crushentry/>
-   Wahan entry select karein aur **Mark identity unresolvable (keeps original
-   entry)** action chunein. Isse original entry private rehti hai aur ghalat
-   match nahi banta.
-9. Baad mein identity dobara check karni ho to **Reopen identity resolution**
-   action use karein.
+1. Staff desk se **Identity review** kholein.
+2. Upar status chips se **Needs review** chunein. Search mein naam, roll number
+   ya campus daal sakte hain.
+3. Ek row par **Review** dabayein. Left side student ne jo type kiya woh hoga,
+   right side possible registered student.
+4. Neeche **Evidence and eligibility** padhein: naam similarity, roll match,
+   conflicts aur block status. Sirf naam dekhkar confirm na karein.
+5. Candidate shortlist se doosra candidate chunein. Har candidate ka score,
+   status aur conflict badge check karein.
+6. Sahi candidate par short reason likhein, phir **Confirm identity** dabayein.
+   Galat candidate par **Reject candidate**, aur proof ka intezaar ho to
+   **Defer** dabayein. Reason audit trail mein save hota hai.
+7. Agar kisi bhi student ko safe tarike se identify nahi kar sakte, to same page
+   ke **Entry controls** mein reason likhkar **Mark unresolvable** dabayein.
+   Original entry private rehti hai aur ghalat match nahi banta.
+8. Baad mein dobara check karna ho to entry ke saath **Re-run resolution**
+   dabayein. List page par ek saath safe re-run bhi kar sakte hain; woh kabhi
+   identity confirm nahi karta.
 
 Is step par kisi student ko koi alert nahi jata. Identity confirm karna sirf
 "yeh banda kaun hai" clear karta hai. Match tabhi banta hai jab dono taraf ki
@@ -223,24 +226,25 @@ In teeno mein se kisi bhi case mein match ya alert nahi banta.
 jab aap approve karte ho. Late approval se feature toota hua lagta hai.
 
 **Real page:**
-<https://whoismycrush.com/802134admin/campus/potentialmatch/>
+<https://whoismycrush.com/staff/matches/>
 
-1. Filter se **Status** = **Pending Verification** chunein.
-2. Ek row kholein. Har row ek taraf ki entry hai. Sahi jodi mein do rows hoti
-   hain, ek har student ki taraf se.
-3. Column **Is reciprocal** check karein. Agar **No** hai to yeh ek taraf ki
-   entry hai. Aise row ko approve na karein; system use skip kar dega.
-4. Neeche diya checklist poora check karein.
-5. Ek jodi ki sirf **ek row** select karein. Dono rows select karne ki zaroorat
-   nahi. Ek row approve karne se poori jodi approve hoti hai.
-6. **Action** dropdown se
-   **Approve selected (creates mutual crush + notifies)** chunein aur **Go**
-   dabayein.
-7. Page par confirmation message dekhein. Agar likha ho "skipped", to reason
-   samajhne ke liye row phir kholein. Aksar identity resolve nahi hoti ya doosri
-   taraf ki entry missing hoti hai.
-8. Agar match galat hai to **Reject selected (nobody is notified)** chunein.
-   Isse poori jodi band ho jati hai aur kisi ko alert nahi jata.
+1. Staff desk se **Match review** kholein. Upar blocked conflicts aur stale
+   proposals ke counts bhi dikhte hain.
+2. Search, campus filter ya **Blocked only** use karein. Har row ek poori jodi
+   hai, dono taraf ki entry ke saath.
+3. **Review pair** dabayein. Person A aur Person B cards mein dono students ki
+   registered details aur unki typed entry compare karein.
+4. **Current verdict** mein stored score, current score, reasons aur blockers
+   padhein. Score sirf hint hai, proof nahi.
+5. Agar **BLOCKED** ya koi hard conflict dikhe to approve mat karein. Blocked
+   jodi ko reject kar sakte hain; isse kisi ko alert nahi jata.
+6. **Decision history** check karein ki yeh jodi pehle review hui thi ya nahi.
+7. Neeche diya checklist poora check karein. Decision reason likhein, phir
+   **Approve match** ya **Reject match** dabayein. Approve se dono students ko
+   alert jata hai; reject se kisi ko nahi.
+8. **Pending proposals without a reciprocal** section mein one-sided entries
+   hoti hain. Unhe approve nahi kiya ja sakta. **Stale proposals** history ke liye
+   hain; unhe bhi approve na karein.
 
 **Approve karne se pehle checklist:**
 
@@ -460,6 +464,10 @@ Queue weekly clear karein, taaki demand ka sahi pata chale.
 
 Har page ka real URL diya hai. `Model` ka matlab yahan "data ka section" hai.
 
+Roz ke identity aur match decisions ke liye **Staff desk** use karein:
+<https://whoismycrush.com/staff/>. Neeche diye Django admin pages maintenance,
+audit aur emergency corrections ke liye hain; daily review ke liye nahi.
+
 ### College
 
 <https://whoismycrush.com/802134admin/campus/college/>
@@ -506,13 +514,20 @@ mein likhein.
 - **Kab:** roll number missing ya ambiguous ho, ek jaise naam hon, ya student
   apna campus ID theek kare.
 - **Kyun:** yeh possible identity ka evidence hai. Yeh match nahi hai.
-- **Karein:** candidate kholein, details compare karein, phir **Confirm**,
-  **Reject** ya **Defer** action chunein.
+- **Karein:** daily review ke liye staff desk par **Review** kholein: candidate
+  details side-by-side compare karein, phir **Confirm identity**, **Reject
+  candidate** ya **Defer** dabayein. Har decision ke saath short reason likhein;
+  woh audit trail mein save hota hai. Django admin actions sirf maintenance ya
+  bulk correction ke liye use karein.
 - **Na karein:** sirf naam dekhkar confirm na karein. Har row khole bina ek saath
   confirm na karein. Candidate detail student ko na batayein.
+- **Galti ho gayi:** rejected/deferred/superseded candidate par **Reopen** action
+  chunein, phir dobara review karein.
 
 Rejected aur deferred candidates apne aap dobara link nahi hote. Identity audit
-log sirf padhne ke liye hai, matlab purani entries badli nahi ja sakti.
+log sirf padhne ke liye hai, matlab purani entries badli nahi ja sakti. Closed
+proposals bhi delete nahi hote; woh `STALE` ho jate hain aur reason audit mein
+rehta hai.
 
 ### Identity audit log
 
@@ -528,8 +543,10 @@ admin ne kya action liya. Isse edit ya delete na karein.
 - **Kab:** daily review.
 - **Kyun:** yeh "kisi ne naam type kiya" se "match announce hua" tak ka safe
   rasta hai.
-- **Karein:** ek jodi ki ek row select karein, checklist check karein, phir
-  **Approve selected** ya **Reject selected** action chunein.
+- **Karein:** daily review ke liye staff desk par **Review pair** kholein, dono
+  directions compare karein, checklist check karein, phir **Approve match** ya
+  **Reject match** dabayein. Django admin action sirf maintenance ya bulk
+  correction ke liye use karein.
 - **Na karein:** status, approve karne wale ka naam ya linked match haath se na
   badlein. Unpaired row approve na karein. Bina check kiye ek saath approve na
   karein.
@@ -603,6 +620,12 @@ Reveal ki permission students dete hain, admin nahi.
   selected you."
 - **Na karein:** message mein naam, roll number, priority ya list position na
   daalein.
+- **Email status:** `pending` = queue mein, `sending` = worker ne claim kiya,
+  `sent` = accepted, `failed` = retry karein, `skipped` = email off ya address
+  missing. Failed rows par **Retry failed or pending email** action ya
+  `python manage.py retry_notifications` chalayein.
+- **dedupe_key:** ek match/student ke liye sirf ek email ensure karta hai. Ise
+  manually change na karein.
 
 ### Rose
 
@@ -744,6 +767,10 @@ setting.
 | `python manage.py check_email --to noreply@whoismycrush.com` | Mail change / weekly | Email system test | Haan |
 | `python manage.py check` | Setting change | Configuration galti pakadna | Haan |
 | `python manage.py test` | Deploy se pehle / monthly | Automatic safety test | Haan |
+| `python manage.py audit_matching` | Har deploy ke baad / monthly | Stale proposals, legacy scores aur email outbox health | Haan |
+| `python manage.py reevaluate_matching --dry-run` | Policy change se pehle | Kitni entries re-check hongi, bina likhe | Haan |
+| `python manage.py reevaluate_matching` | Approved rollout window | Identities/proposals dobara calculate | Haan |
+| `python manage.py retry_notifications` | Email fail ho to | Failed/pending match emails retry | Haan |
 | `python manage.py createsuperuser` | Sirf naye server par | Admin account | Zaroorat par |
 | `python manage.py shell -c "from campus.services import reconcile_all_matches; print(reconcile_all_matches())"` | Import / miss hone par | Naye proposals queue karna | Haan |
 | `python manage.py shell -c "from campus.services import prune_broken_matches; print(prune_broken_matches())"` | Rarely, backup ke baad | Tooti matches delete | Careful |
@@ -870,6 +897,9 @@ Neeche sab real URLs hain. `https://whoismycrush.com` ke baad admin ka rasta
 | --- | --- |
 | Admin home | <https://whoismycrush.com/802134admin/> |
 | Admin login | <https://whoismycrush.com/802134admin/login/> |
+| Staff review desk | <https://whoismycrush.com/staff/> |
+| Staff identity review | <https://whoismycrush.com/staff/identities/> |
+| Staff match review | <https://whoismycrush.com/staff/matches/> |
 | Identity candidates | <https://whoismycrush.com/802134admin/campus/identitycandidate/> |
 | Identity audit log | <https://whoismycrush.com/802134admin/campus/identityresolutionaudit/> |
 | Crush entries | <https://whoismycrush.com/802134admin/campus/crushentry/> |

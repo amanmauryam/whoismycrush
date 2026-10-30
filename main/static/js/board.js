@@ -81,6 +81,94 @@
     });
   }
 
+  /* ---- Busy forms ------------------------------------------------------- */
+
+  function busyForms() {
+    var forms = $$("[data-busy-form]");
+    if (!forms.length) return;
+
+    forms.forEach(function (form) {
+      $$("button[type='submit'], input[type='submit']", form).forEach(function (button) {
+        if (button.disabled) button.setAttribute("data-busy-was-disabled", "true");
+      });
+
+      form.addEventListener("submit", function (event) {
+        if (form.getAttribute("data-submitting") === "true") {
+          event.preventDefault();
+          return;
+        }
+        form.setAttribute("data-submitting", "true");
+        form.setAttribute("aria-busy", "true");
+        var submitter = event.submitter || null;
+        var buttons = $$("button[type='submit'], input[type='submit']", form);
+
+        setTimeout(function () {
+          buttons.forEach(function (button) {
+            if (button.disabled) {
+              button.setAttribute("data-busy-was-disabled", "true");
+            }
+            if (!button.hasAttribute("data-original-label")) {
+              button.setAttribute(
+                "data-original-label",
+                button.tagName === "INPUT" ? button.value : button.textContent
+              );
+            }
+            if (button === submitter || !submitter) {
+              if (button.tagName === "INPUT") button.value = "Working...";
+              else button.textContent = "Working...";
+            }
+            button.disabled = true;
+          });
+        }, 0);
+      });
+    });
+
+    window.addEventListener("pageshow", function () {
+      forms.forEach(function (form) {
+        form.removeAttribute("data-submitting");
+        form.removeAttribute("aria-busy");
+        $$("button[type='submit'], input[type='submit']", form).forEach(function (button) {
+          var wasDisabled = button.getAttribute("data-busy-was-disabled") === "true";
+          button.disabled = wasDisabled;
+          button.removeAttribute("data-busy-was-disabled");
+          var original = button.getAttribute("data-original-label");
+          if (!original) return;
+          if (button.tagName === "INPUT") button.value = original;
+          else button.textContent = original;
+        });
+      });
+    });
+  }
+
+  /* ---- Bulk selection --------------------------------------------------- */
+
+  function checkAll() {
+    $$("[data-check-all]").forEach(function (master) {
+      var group = master.getAttribute("data-check-all");
+      var items = $$('[data-check-item="' + group + '"]');
+      if (!items.length) return;
+
+      function sync() {
+        var checked = items.filter(function (item) {
+          return item.checked;
+        }).length;
+        master.checked = checked === items.length;
+        master.indeterminate = checked > 0 && checked < items.length;
+      }
+
+      master.addEventListener("change", function () {
+        items.forEach(function (item) {
+          item.checked = master.checked;
+        });
+        sync();
+      });
+
+      items.forEach(function (item) {
+        item.addEventListener("change", sync);
+      });
+    });
+  }
+
   /* ---- Campus search: submit on the go --------------------------------- */
 
   function instantSearch() {
@@ -159,6 +247,8 @@
     mobileNav();
     toasts();
     confirms();
+    busyForms();
+    checkAll();
     instantSearch();
     revealDramaticPause();
     stampSlots();

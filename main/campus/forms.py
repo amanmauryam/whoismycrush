@@ -277,6 +277,12 @@ class CrushEntryForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.author = author
         self.priority = priority
+        # Make the ownership visible to ``CrushEntry.clean`` during form
+        # validation; ``save`` still writes the same values.
+        if author is not None:
+            self.instance.submitted_by = author
+        if priority is not None:
+            self.instance.priority = priority
         self.fields["college"].queryset = College.objects.filter(is_active=True)
         self.fields["college"].empty_label = "Select their campus"
         self.fields["college"].required = True
@@ -328,28 +334,20 @@ class CrushEntryForm(forms.ModelForm):
         college = cleaned.get("college")
         roll = cleaned.get("roll_number")
 
+        if author is not None and college and college.pk != author.college_id:
+            self.add_error(
+                "college",
+                "Crushes can only be entered on your own campus.",
+            )
+
         # You cannot enter yourself as one of your own crushes.
         if author is not None and college and roll:
             own_roll = normalize_roll_number(author.roll_number)
             if college.pk == author.college_id and normalize_roll_number(roll) == own_roll:
                 self.add_error("roll_number", "That is your own roll number.")
 
-        # One person once per list, whether adding or editing a slot.
-        if author is not None and college and roll:
-            dupe = (
-                CrushEntry.objects.active()
-                .filter(
-                    submitted_by=author,
-                    college=college,
-                    normalized_roll_number=normalize_roll_number(roll),
-                )
-                .exclude(pk=self.instance.pk)
-            )
-            if dupe.exists():
-                self.add_error(
-                    "roll_number",
-                    "You already entered someone with this campus and roll number.",
-                )
+        # Duplicate active target detection lives on ``CrushEntry.clean`` so the
+        # admin and every other ModelForm path get the same safeguard.
         return cleaned
 
     def save(self, commit=True):
@@ -439,12 +437,25 @@ class PotentialMatchNotesForm(forms.Form):
     """Admin review note. Persisted into the audit trail (requirement 25)."""
 
     admin_notes = forms.CharField(
-        required=False,
+        required=True,
+        min_length=3,
+        max_length=300,
         widget=forms.Textarea(
-            attrs={"rows": "4", "placeholder": "Why you approved or rejected this."}
+            attrs={
+                "rows": "4",
+                "placeholder": "Why you approved or rejected this.",
+                "required": "required",
+            }
         ),
         label="Review notes",
+        help_text="Required. Stored in the audit trail, never shown to students.",
     )
+
+    def clean_admin_notes(self):
+        notes = " ".join(self.cleaned_data["admin_notes"].split())
+        if len(notes) < 3:
+            raise ValidationError("Add a short reason for this decision.")
+        return notes
 
 
 class PrivacySettingsForm(forms.Form):

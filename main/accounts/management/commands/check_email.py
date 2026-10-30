@@ -20,6 +20,20 @@ from django.core.mail import EmailMessage, get_connection
 from django.core.management.base import BaseCommand, CommandError
 
 
+def _smtp_timeout() -> int:
+    """Allow for providers that send their greeting after a DNS/blocklist check."""
+
+    values = (
+        getattr(settings, "EMAIL_TIMEOUT", 45),
+        getattr(settings, "VERIFICATION_EMAIL_TIMEOUT", 45),
+    )
+    try:
+        timeout = max(int(value) for value in values if value)
+    except (TypeError, ValueError):
+        return 45
+    return max(timeout, 45)
+
+
 def _probe_smtp() -> str:
     """Re-run the login by hand to recover the server's own error message.
 
@@ -32,12 +46,23 @@ def _probe_smtp() -> str:
     password = settings.EMAIL_HOST_PASSWORD
     last = "no response from the server"
     connection = None
+    timeout = _smtp_timeout()
     try:
-        connection = smtplib.SMTP(settings.EMAIL_HOST, settings.EMAIL_PORT, timeout=15)
+        if settings.EMAIL_USE_SSL:
+            connection = smtplib.SMTP_SSL(
+                settings.EMAIL_HOST,
+                settings.EMAIL_PORT,
+                timeout=timeout,
+                context=ssl.create_default_context(),
+            )
+        else:
+            connection = smtplib.SMTP(
+                settings.EMAIL_HOST, settings.EMAIL_PORT, timeout=timeout
+            )
         connection.ehlo()
-        if settings.EMAIL_USE_TLS or settings.EMAIL_USE_SSL:
+        if settings.EMAIL_USE_TLS and not settings.EMAIL_USE_SSL:
             connection.starttls(context=ssl.create_default_context())
-        connection.ehlo()
+            connection.ehlo()
 
         for payload in (
             "LOGIN",
@@ -96,6 +121,7 @@ class Command(BaseCommand):
         self.stdout.write(
             f"EMAIL_HOST_PASSWORD : {'set' if settings.EMAIL_HOST_PASSWORD else '<missing>'}"
         )
+        self.stdout.write(f"EMAIL_TIMEOUT       : {_smtp_timeout()}")
         self.stdout.write(f"DEFAULT_FROM_EMAIL  : {settings.DEFAULT_FROM_EMAIL}")
         self.stdout.write(f"SITE_URL            : {settings.SITE_URL}")
 
@@ -107,7 +133,7 @@ class Command(BaseCommand):
                 )
             )
 
-        connection = get_connection()
+        connection = get_connection(timeout=_smtp_timeout())
         try:
             connection.open()
         except Exception as exc:

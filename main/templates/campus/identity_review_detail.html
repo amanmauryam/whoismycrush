@@ -3,132 +3,375 @@
 {% block content %}
 <div class="container">
   <div class="breadcrumb">
+    <a href="{% url 'campus:staff_dashboard' %}">Staff desk</a>
+    <span>→</span>
     <a href="{% url 'campus:identity_review' %}">Identity review</a>
     <span>→</span>
     <span>Entry #{{ entry.pk }}</span>
   </div>
 
   <div class="page-head">
-    <h1>Identity review #{{ entry.pk }}</h1>
-    <p>Resolve the typed entry to one registered student before match review.</p>
-  </div>
-
-  <div class="paper" style="margin-top:20px">
-    <h2 class="tiny-label">Typed entry</h2>
-    <dl class="detail-list">
-      <dt>Name</dt><dd>{{ entry.full_name }}</dd>
-      <dt>Roll</dt><dd>{{ entry.roll_number|default:"not given" }}</dd>
-      <dt>Campus</dt><dd>{{ entry.college.name }}</dd>
-      <dt>Course / year</dt><dd>{{ entry.get_course_display }} · Year {{ entry.year }}</dd>
-      <dt>Section</dt><dd>{{ entry.section|default:"not given" }}</dd>
-      <dt>Department</dt><dd>{{ entry.department|default:"not given" }}</dd>
-      <dt>Submitted by</dt><dd>{{ entry.submitted_by.full_name }}</dd>
-      <dt>Status</dt><dd>{{ entry.get_identity_status_display }}</dd>
-      <dt>Verified identity</dt>
-      <dd>
-        {% if entry.resolved_student %}
-          {{ entry.resolved_student.full_name }}
-          <span class="muted">({{ entry.resolution_method }})</span>
-        {% else %}
-          <span class="muted">Not linked</span>
-        {% endif %}
-      </dd>
-    </dl>
-
-    <div class="review-actions" style="margin-top:16px">
-      <form method="post" action="{% url 'campus:identity_entry_action' entry.pk 'unresolvable' %}">
-        {% csrf_token %}
-        <button class="btn btn-sm" type="submit">Mark unresolvable</button>
-      </form>
-      <form method="post" action="{% url 'campus:identity_entry_action' entry.pk 'reopen' %}">
-        {% csrf_token %}
-        <button class="btn btn-sm" type="submit">Re-run resolution</button>
-      </form>
+    <p class="tiny-label">Private identity desk</p>
+    <div class="head-with-stamp">
+      <h1>Identity review #{{ entry.pk }}</h1>
+      <span class="stamp">{{ entry.get_identity_status_display }}</span>
     </div>
+    <p>
+      Resolve the typed entry to one registered student before it can enter
+      match review. Compare the source fields, then record a reason.
+    </p>
   </div>
 
-  <section class="section">
-    <h2 class="tiny-label">Candidates</h2>
+  {% include "campus/staff_nav.html" %}
+
+  {% if selected_candidate.hard_conflict %}
+    <div class="notice-box is-warning">
+      {% include "components/icon.html" with name="shield" size=15 %}
+      This candidate has conflicting evidence. Confirm only if you have a
+      separate, reliable way to verify the identity.
+    </div>
+  {% endif %}
+  {% if selected_candidate.is_blocked %}
+    <div class="notice-box is-danger">
+      {% include "components/icon.html" with name="shield" size=15 %}
+      A block exists between the submitter and this candidate. This identity
+      cannot be linked.
+    </div>
+  {% endif %}
+
+  <div class="compare-grid identity-compare">
+    <article class="paper compare-card">
+      <span class="stamp stamp-ink">TYPED ENTRY</span>
+      <h2>{{ entry.full_name }}</h2>
+      <p class="muted">{{ entry.college.name }}</p>
+      <dl class="id-meta">
+        <div><dt>Roll no.</dt><dd>{{ entry.roll_number|default:"Not given" }}</dd></div>
+        <div><dt>Course</dt><dd>{{ entry.get_course_display }}</dd></div>
+        <div><dt>Year</dt><dd>{{ entry.year }}</dd></div>
+        <div><dt>Section</dt><dd>{{ entry.section|default:"Not given" }}</dd></div>
+        <div><dt>Department</dt><dd>{{ entry.department|default:"Not given" }}</dd></div>
+        <div><dt>Nickname</dt><dd>{{ entry.nickname|default:"Not given" }}</dd></div>
+        <div><dt>Submitted by</dt><dd>{{ entry.submitted_by.full_name }}</dd></div>
+        <div><dt>Submitted</dt><dd>{{ entry.created_at|date:"d M Y, H:i" }}</dd></div>
+        {% if entry.resolved_student %}
+          <div>
+            <dt>Linked identity</dt>
+            <dd>
+              {{ entry.resolved_student.full_name }}
+              <span class="muted small">({{ entry.resolution_method|default:"reviewed" }})</span>
+            </dd>
+          </div>
+        {% endif %}
+      </dl>
+    </article>
+
+    <article class="paper compare-card{% if selected_candidate.is_blocked %} is-blocked{% endif %}">
+      {% if selected_candidate %}
+        <span class="stamp">REGISTERED STUDENT</span>
+        <h2>{{ selected_candidate.candidate.full_name }}</h2>
+        <p class="muted">{{ selected_candidate.candidate.college.name }}</p>
+        <dl class="id-meta">
+          <div><dt>Roll no.</dt><dd>{{ selected_candidate.candidate.roll_number }}</dd></div>
+          <div><dt>Course</dt><dd>{{ selected_candidate.candidate.get_course_display }}</dd></div>
+          <div><dt>Year</dt><dd>{{ selected_candidate.candidate.get_year_display }}</dd></div>
+          <div><dt>Section</dt><dd>{{ selected_candidate.candidate.section|default:"Not given" }}</dd></div>
+          <div><dt>Department</dt><dd>{{ selected_candidate.candidate.department|default:"Not given" }}</dd></div>
+          <div><dt>Nickname</dt><dd>{{ selected_candidate.candidate.nickname|default:"Not given" }}</dd></div>
+          <div><dt>Account</dt><dd>{% if selected_candidate.candidate.user.is_active %}Active{% else %}Inactive{% endif %}</dd></div>
+          <div><dt>Candidate status</dt><dd>{{ selected_candidate.get_status_display }}</dd></div>
+        </dl>
+        <div class="compare-verdicts">
+          <span class="score-pill">
+            {% if selected_candidate.confidence_score %}
+              {{ selected_candidate.confidence_score|floatformat:0 }}% confidence
+            {% else %}
+              No score
+            {% endif %}
+          </span>
+          <span class="score-pill">
+            Name {{ selected_candidate.name_similarity|floatformat:2|default:"—" }}
+          </span>
+          {% if selected_candidate.evidence.roll_exact %}
+            <span class="stamp stamp-green">ROLL MATCH</span>
+          {% elif selected_candidate.evidence.roll_conflict %}
+            <span class="stamp">ROLL CONFLICT</span>
+          {% else %}
+            <span class="stamp stamp-ink">ROLL UNCHECKED</span>
+          {% endif %}
+        </div>
+      {% else %}
+        <span class="stamp stamp-ink">NO CANDIDATE</span>
+        <h2>No safe candidate yet</h2>
+        <p class="muted">
+          Keep the entry safely parked. It will be rechecked when a matching
+          student registers or edits their campus identity.
+        </p>
+      {% endif %}
+    </article>
+  </div>
+
+  {% if selected_candidate %}
+    <section class="paper evidence-panel" aria-labelledby="evidence-heading">
+      <div class="evidence-head">
+        <div>
+          <span class="tiny-label">Why this candidate</span>
+          <h2 id="evidence-heading">Evidence and eligibility</h2>
+        </div>
+        {% if selected_candidate.is_eligible %}
+          <span class="stamp stamp-green">READY FOR DECISION</span>
+        {% elif selected_candidate.is_blocked %}
+          <span class="stamp">BLOCKED</span>
+        {% elif selected_candidate.hard_conflict %}
+          <span class="stamp">CONFLICT</span>
+        {% else %}
+          <span class="stamp stamp-ink">{{ selected_candidate.get_status_display }}</span>
+        {% endif %}
+      </div>
+
+      <div class="evidence-columns">
+        <div>
+          <h3 class="tiny-label">Matched signals</h3>
+          {% if selected_candidate.reasons %}
+            <ul class="evidence-list">
+              {% for reason in selected_candidate.reasons %}
+                <li>{{ reason }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted small">No positive signals recorded.</p>
+          {% endif %}
+        </div>
+        <div>
+          <h3 class="tiny-label">Conflicts</h3>
+          {% if selected_candidate.conflicts %}
+            <ul class="evidence-list is-conflict">
+              {% for conflict in selected_candidate.conflicts %}
+                <li>{{ conflict }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted small">No hard field conflicts recorded.</p>
+          {% endif %}
+          {% if selected_candidate.is_blocked %}
+            <p class="evidence-warning">A block prevents this link regardless of score.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="score-breakdown" aria-label="Score breakdown">
+        <h3 class="tiny-label">Score breakdown</h3>
+        {% if selected_candidate.score_breakdown %}
+          {% for item in selected_candidate.score_breakdown %}
+            <div class="score-row">
+              <span class="score-label">{{ item.label }}</span>
+              <span class="score-track" aria-hidden="true">
+                <span class="score-fill" style="width: {{ item.percent }}%"></span>
+              </span>
+              <span class="score-value">{{ item.points|floatformat:1 }} / {{ item.max|floatformat:0 }}</span>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p class="muted small">
+            This candidate was scored before component scores were recorded.
+            Re-run resolution to refresh the breakdown.
+          </p>
+        {% endif %}
+      </div>
+
+      {% if selected_candidate.reviewed_at %}
+        <div class="prior-decision">
+          <h3 class="tiny-label">Previous decision</h3>
+          <p>
+            <span class="stamp">{{ selected_candidate.get_status_display }}</span>
+            by {{ selected_candidate.reviewed_by|default:"system" }}
+            on {{ selected_candidate.reviewed_at|date:"d M Y, H:i" }}
+          </p>
+          {% if selected_candidate.review_notes %}
+            <p class="small">{{ selected_candidate.review_notes }}</p>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if selected_candidate.is_open %}
+        <form class="decision-form" method="post" data-busy-form
+              action="{% url 'campus:identity_candidate_action' selected_candidate.pk 'confirm' %}">
+          {% csrf_token %}
+          <label for="candidate-notes">Decision reason</label>
+          <textarea id="candidate-notes" name="notes" rows="3" maxlength="300" required
+                    aria-describedby="candidate-notes-help"
+                    placeholder="What evidence did you check?"></textarea>
+          <p id="candidate-notes-help" class="help">
+            Required for confirm, reject and defer. Stored in the audit trail.
+            Confirming links the identity and sends the entry to match review;
+            rejecting or deferring does not notify the student.
+          </p>
+          <div class="form-actions decision-actions">
+            <button class="btn btn-primary" type="submit"
+                    data-confirm="Confirm this candidate? Their identity will be linked and match review may follow."
+                    {% if selected_candidate.is_blocked %}disabled{% endif %}>
+              Confirm identity
+            </button>
+            <button class="btn btn-danger" type="submit"
+                    formaction="{% url 'campus:identity_candidate_action' selected_candidate.pk 'reject' %}"
+                    data-confirm="Reject this candidate? It stays rejected until explicitly reopened.">
+              Reject candidate
+            </button>
+            <button class="btn" type="submit"
+                    formaction="{% url 'campus:identity_candidate_action' selected_candidate.pk 'defer' %}"
+                    data-confirm="Defer this candidate? It stays parked until someone reopens it.">
+              Defer
+            </button>
+          </div>
+          {% if selected_candidate.is_blocked %}
+            <p class="help">Confirm is disabled while a block exists.</p>
+          {% endif %}
+        </form>
+      {% elif selected_candidate.status == 'confirmed' %}
+        <div class="prior-decision">
+          <h3 class="tiny-label">Outcome</h3>
+          <p>This candidate is already confirmed for the entry.</p>
+        </div>
+      {% else %}
+        <form class="decision-form" method="post" data-busy-form
+              action="{% url 'campus:identity_candidate_action' selected_candidate.pk 'reopen' %}">
+          {% csrf_token %}
+          <label for="reopen-notes">Why reopen this candidate?</label>
+          <textarea id="reopen-notes" name="notes" rows="2" maxlength="300"
+                    placeholder="Optional context for reopening"></textarea>
+          <div class="form-actions">
+            <button class="btn" type="submit"
+                    data-confirm="Reopen this candidate for review?">
+              Reopen candidate
+            </button>
+          </div>
+        </form>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  <section class="section" aria-labelledby="candidate-list-heading">
+    <div class="section-head">
+      <div>
+        <span class="section-label">Candidate shortlist</span>
+        <h2 id="candidate-list-heading">{{ candidate_count }} candidate{{ candidate_count|pluralize }}</h2>
+      </div>
+    </div>
+
     {% if candidates %}
-      <div class="paper">
-        <table class="review-table">
-          <thead>
-            <tr>
-              <th scope="col">Student</th>
-              <th scope="col">Roll</th>
-              <th scope="col">Course / year</th>
-              <th scope="col">Name match</th>
-              <th scope="col">Confidence</th>
-              <th scope="col">Status</th>
-              <th scope="col">Decision</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for candidate in candidates %}
-              <tr>
-                <td>
-                  {{ candidate.candidate.full_name }}
-                  <div class="muted small">{{ candidate.candidate.college.name }}</div>
-                </td>
-                <td>{{ candidate.candidate.roll_number }}</td>
-                <td>
-                  {{ candidate.candidate.get_course_display }} · Year {{ candidate.candidate.year }}
-                  {% if candidate.candidate.section %}· {{ candidate.candidate.section }}{% endif %}
-                </td>
-                <td>
-                  {% if candidate.name_similarity %}
-                    {{ candidate.name_similarity|floatformat:2 }}
-                  {% else %}—{% endif %}
-                </td>
-                <td>
-                  {% if candidate.confidence_score %}
-                    {{ candidate.confidence_score|floatformat:0 }}%
-                  {% else %}—{% endif %}
-                </td>
-                <td>{{ candidate.get_status_display }}</td>
-                <td>
-                  <form method="post" action="{% url 'campus:identity_candidate_action' candidate.pk 'confirm' %}" style="display:inline">
-                    {% csrf_token %}
-                    <button class="btn btn-sm" type="submit">Confirm</button>
-                  </form>
-                  <form method="post" action="{% url 'campus:identity_candidate_action' candidate.pk 'reject' %}" style="display:inline">
-                    {% csrf_token %}
-                    <button class="btn btn-sm" type="submit">Reject</button>
-                  </form>
-                  <form method="post" action="{% url 'campus:identity_candidate_action' candidate.pk 'defer' %}" style="display:inline">
-                    {% csrf_token %}
-                    <button class="btn btn-sm" type="submit">Defer</button>
-                  </form>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <div class="candidate-grid">
+        {% for candidate in candidates %}
+          <a class="candidate-card{% if selected_candidate.pk == candidate.pk %} is-selected{% endif %}{% if candidate.hard_conflict or candidate.is_blocked %} is-conflict{% endif %}"
+             href="?candidate={{ candidate.pk }}#evidence-heading"
+             {% if selected_candidate.pk == candidate.pk %}aria-current="true"{% endif %}>
+            <span class="candidate-card-head">
+              <strong>{{ candidate.candidate.full_name }}</strong>
+              <span class="score-pill">
+                {% if candidate.confidence_score %}
+                  {{ candidate.confidence_score|floatformat:0 }}%
+                {% else %}
+                  —
+                {% endif %}
+              </span>
+            </span>
+            <span class="muted small">
+              {{ candidate.candidate.roll_number }} · {{ candidate.candidate.get_course_display }} · Year {{ candidate.candidate.year }}
+            </span>
+            <span class="candidate-card-badges">
+              <span class="stamp{% if candidate.status == 'confirmed' %} stamp-green{% endif %}">{{ candidate.get_status_display }}</span>
+              {% if candidate.is_blocked %}
+                <span class="filter-tag is-danger">Blocked</span>
+              {% elif candidate.hard_conflict %}
+                <span class="filter-tag is-warning">Conflict</span>
+              {% elif candidate.is_eligible %}
+                <span class="filter-tag">Eligible</span>
+              {% endif %}
+            </span>
+            {% if candidate.review_notes %}
+              <span class="candidate-note">{{ candidate.review_notes|truncatechars:110 }}</span>
+            {% endif %}
+          </a>
+        {% endfor %}
       </div>
     {% else %}
-      <p class="muted">
-        No plausible candidate yet. The entry is kept safely and is rechecked when
-        a matching student registers or edits their campus identity.
-      </p>
+      <div class="empty-state">
+        <span class="doodle" aria-hidden="true">?</span>
+        <h2>No plausible candidate yet</h2>
+        <p class="muted">
+          The entry is kept safely and is rechecked when a matching student
+          registers or edits their campus identity.
+        </p>
+      </div>
     {% endif %}
   </section>
 
-  <section class="section">
-    <h2 class="tiny-label">Audit trail</h2>
+  <section class="section" aria-labelledby="entry-actions-heading">
+    <div class="section-head">
+      <div>
+        <span class="section-label">Entry controls</span>
+        <h2 id="entry-actions-heading">Resolution actions</h2>
+      </div>
+    </div>
+
+    <div class="paper entry-actions">
+      {% if entry.identity_status == 'unresolvable' %}
+        <form method="post" data-busy-form action="{% url 'campus:identity_entry_action' entry.pk 'reopen' %}">
+          {% csrf_token %}
+          <label for="entry-reopen-notes">Why re-run this entry?</label>
+          <input class="input" id="entry-reopen-notes" name="notes" maxlength="300"
+                 placeholder="Optional context">
+          <button class="btn btn-sm" type="submit"
+                  data-confirm="Re-run safe identity resolution for this entry?">
+            Re-run resolution
+          </button>
+        </form>
+      {% else %}
+        <form method="post" data-busy-form action="{% url 'campus:identity_entry_action' entry.pk 'unresolvable' %}">
+          {% csrf_token %}
+          <label for="entry-close-notes">Mark unresolvable</label>
+          <input class="input" id="entry-close-notes" name="notes" maxlength="300" required
+                 placeholder="Reason (required)">
+          <button class="btn btn-sm btn-danger" type="submit"
+                  data-confirm="Mark this identity unresolvable? The typed entry stays private and is not deleted.">
+            Mark unresolvable
+          </button>
+        </form>
+        <form method="post" data-busy-form action="{% url 'campus:identity_entry_action' entry.pk 'reopen' %}">
+          {% csrf_token %}
+          <button class="btn btn-sm" type="submit"
+                  data-confirm="Re-run safe identity resolution for this entry?">
+            Re-run resolution
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="audit-heading">
+    <div class="section-head">
+      <div>
+        <span class="section-label">Accountability</span>
+        <h2 id="audit-heading">Audit trail</h2>
+      </div>
+    </div>
+
     {% if audit %}
-      <ul class="review-list">
+      <ol class="audit-list">
         {% for event in audit %}
           <li>
             <span class="stamp">{{ event.get_action_display }}</span>
-            {{ event.from_status|default:"—" }} → {{ event.to_status|default:"—" }}
-            <span class="muted">
-              {% if event.candidate %}· {{ event.candidate.full_name }}{% endif %}
-              · {{ event.actor|default:"system" }}
-              · {{ event.created_at }}
-            </span>
+            <div class="audit-copy">
+              <strong>
+                {{ event.from_status|default:"—" }} → {{ event.to_status|default:"—" }}
+              </strong>
+              <span class="muted small">
+                {% if event.candidate %}{{ event.candidate.full_name }} · {% endif %}
+                {{ event.actor|default:"system" }} · {{ event.created_at|date:"d M Y, H:i" }}
+              </span>
+              {% if event.notes %}<span class="audit-note">{{ event.notes }}</span>{% endif %}
+            </div>
           </li>
         {% endfor %}
-      </ul>
+      </ol>
     {% else %}
       <p class="muted">No identity decisions recorded yet.</p>
     {% endif %}
